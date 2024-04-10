@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 // use csv::Writer;
+use flate2::read::{GzDecoder, GzEncoder};
 use std::env;
 use std::fs::{self, read_dir, File};
 use std::io::{self, BufRead, BufReader};
 use std::path::{Path, PathBuf};
+
 fn main() {
     let test_top = PathBuf::from("/home/david/Documents/Academic/UVM/Harris_Lab/Mt_sequences");
     let genotype = env::args()
@@ -14,10 +16,12 @@ fn main() {
     let annotation = create_full_path(test_top.clone(), String::from("annotations"));
     let dir_geno = get_name(genotype.clone(), genomes.clone());
     let dir_anno = get_name(genotype.clone(), annotation.clone());
-    let full_geno = create_full_path(genomes.clone(), dir_geno[1].clone());
-    let full_anno = create_full_path(genomes.clone(), dir_anno[1].clone());
+    let full_geno = create_full_path(genomes.clone(), dir_geno.clone());
+    let full_anno = create_full_path(annotation.clone(), dir_anno.clone());
     println!("{:?}", full_geno);
     println!("{:?}", full_anno);
+    //assert!(!Path::new(&full_geno).exists());
+    //assert!(!Path::new(&full_anno).exists());
 }
 
 fn create_full_path(tdir: PathBuf, dir: String) -> PathBuf {
@@ -27,10 +31,11 @@ fn create_full_path(tdir: PathBuf, dir: String) -> PathBuf {
     PathBuf::from(s_dir)
 }
 
-fn get_name(pat: String, search_dir: PathBuf) -> Vec<String> {
+fn get_name(pat: String, search_dir: PathBuf) -> String {
     let mut patmatch = String::new();
     let mut mdir = String::new();
-    if let Ok(files) = read_dir(search_dir) {
+    let mut fdir = String::from("/medtr.");
+    if let Ok(files) = read_dir(search_dir.clone()) {
         for file in files {
             let sdir = file.unwrap().path().into_os_string().into_string().unwrap();
             let sp = sdir.split('/').last().unwrap().split('.').next().unwrap();
@@ -43,9 +48,38 @@ fn get_name(pat: String, search_dir: PathBuf) -> Vec<String> {
     } else {
         println!("Path not found");
     }
-    let mut rvec: Vec<String> = Vec::new();
-    rvec.push(patmatch);
-    rvec.push(mdir);
+
+    if search_dir
+        .clone()
+        .into_os_string()
+        .into_string()
+        .unwrap()
+        .split('/')
+        .last()
+        .unwrap()
+        == String::from("genomes")
+    {
+        fdir.push_str(&mdir);
+        fdir.push_str(".genome_main.fna.gz");
+    }
+
+    if search_dir
+        .clone()
+        .into_os_string()
+        .into_string()
+        .unwrap()
+        .split('/')
+        .last()
+        .unwrap()
+        == String::from("annotations")
+    {
+        fdir.push_str(&mdir);
+        fdir.push_str(".cds.fna.gz");
+    }
+
+    let mut rvec = String::new();
+    rvec.push_str(&mdir);
+    rvec.push_str(&fdir);
     rvec
 }
 
@@ -72,4 +106,13 @@ where
         }
     }
     fasta
+}
+
+fn parse_header(header: String) -> Vec<String> {
+    let sp = header.split(' ');
+    let mut svec: Vec<String> = Vec::new();
+    for i in sp {
+        svec.push(i.to_string());
+    }
+    svec
 }
