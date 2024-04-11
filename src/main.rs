@@ -25,8 +25,16 @@ fn main() {
     //assert!(!Path::new(&full_anno).exists());
     let decogeno = read_fasta(full_geno);
     let decoanno = read_fasta(full_anno);
-    println!("{:?}", decogeno.keys());
-    println!("{:?}", decoanno.keys());
+    let gkeys = decogeno.keys();
+    let akeys = decoanno.keys();
+    let leng = gkeys.len();
+    let lena = akeys.len();
+    println!("{:?}", leng);
+    println!("{:?}", lena);
+    println!("{:?}", gkeys);
+    for head in decogeno.keys() {
+        println!("{:?}", parse_header(head.to_string()));
+    }
 }
 
 fn create_full_path(tdir: PathBuf, dir: String) -> PathBuf {
