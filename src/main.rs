@@ -1,19 +1,20 @@
 use std::collections::HashMap;
 // use csv::Writer;
-use flate2::read::{GzDecoder, GzEncoder};
+use flate2::read::GzDecoder;
 use std::env;
 use std::fs::{self, read_dir, File};
-use std::io::{self, BufRead, BufReader};
+use std::io::{self, BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 
 fn main() {
-    let test_top = PathBuf::from("/home/david/Documents/Academic/UVM/Harris_Lab/Mt_sequences");
+    // let test_top1 = PathBuf::from("/home/david/Documents/Academic/UVM/Harris_Lab/Mt_sequences");
+    let test_top2 = PathBuf::from("/media/david/WorkDrive/Documents/UVM/HarrisLab/Mt_Data");
     let genotype = env::args()
         .nth(1)
         .expect("please enter a valid genome name");
     // let top_dir = env::current_dir().expect("bad top dir");
-    let genomes = create_full_path(test_top.clone(), String::from("genomes"));
-    let annotation = create_full_path(test_top.clone(), String::from("annotations"));
+    let genomes = create_full_path(test_top2.clone(), String::from("genomes"));
+    let annotation = create_full_path(test_top2.clone(), String::from("annotations"));
     let dir_geno = get_name(genotype.clone(), genomes.clone());
     let dir_anno = get_name(genotype.clone(), annotation.clone());
     let full_geno = create_full_path(genomes.clone(), dir_geno.clone());
@@ -22,6 +23,10 @@ fn main() {
     println!("{:?}", full_anno);
     //assert!(!Path::new(&full_geno).exists());
     //assert!(!Path::new(&full_anno).exists());
+    let decogeno = read_fasta(full_geno);
+    let decoanno = read_fasta(full_anno);
+    println!("{:?}", decogeno.keys());
+    println!("{:?}", decoanno.keys());
 }
 
 fn create_full_path(tdir: PathBuf, dir: String) -> PathBuf {
@@ -88,7 +93,8 @@ where
     P: AsRef<Path>,
 {
     let file = File::open(filename).expect("Could not open file");
-    let buf = BufReader::new(file);
+    let gz = GzDecoder::new(file);
+    let buf = BufReader::new(gz);
     let mut fasta = HashMap::new();
     let mut curid = String::new();
     let mut curseq = String::new();
