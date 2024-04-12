@@ -1,28 +1,29 @@
 use std::collections::HashMap;
+use std::time::Instant;
 // use csv::Writer;
-use flate2::read::GzDecoder;
+use flate2::read::MultiGzDecoder;
+use std::array;
 use std::env;
 use std::fs::{read_dir, File};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
 fn main() {
-    let test_top1 = PathBuf::from("/home/david/Documents/Academic/UVM/Harris_Lab/Mt_sequences");
-    // let test_top2 = PathBuf::from("/media/david/WorkDrive/Documents/UVM/HarrisLab/Mt_Data");
+    // let test_top1 = PathBuf::from("/home/david/Documents/Academic/UVM/Harris_Lab/Mt_sequences");
+    let test_top2 = PathBuf::from("/media/david/WorkDrive/Documents/UVM/HarrisLab/Mt_Data");
     let genotype = env::args()
         .nth(1)
         .expect("please enter a valid genome name");
     // let top_dir = env::current_dir().expect("bad top dir");
-    let genomes = create_full_path(test_top1.clone(), String::from("genomes"));
-    let annotation = create_full_path(test_top1.clone(), String::from("annotations"));
+    let genomes = create_full_path(test_top2.clone(), String::from("genomes"));
+    let annotation = create_full_path(test_top2.clone(), String::from("annotations"));
     let dir_geno = get_name(genotype.clone(), genomes.clone());
     let dir_anno = get_name(genotype.clone(), annotation.clone());
     let full_geno = create_full_path(genomes.clone(), dir_geno.clone());
     let full_anno = create_full_path(annotation.clone(), dir_anno.clone());
-    println!("{:?}", full_geno);
-    println!("{:?}", full_anno);
-    //assert!(!Path::new(&full_geno).exists());
-    //assert!(!Path::new(&full_anno).exists());
+    assert!(Path::new(&full_anno).exists());
+    assert!(Path::new(&full_geno).exists());
+
     let decogeno = read_fasta(full_geno);
     let decoanno = read_fasta(full_anno);
     let gkeys = decogeno.keys();
@@ -31,8 +32,12 @@ fn main() {
     let lena = akeys.len();
     println!("{:?}", leng);
     println!("{:?}", lena);
-    println!("{:?}", gkeys);
-    for head in decogeno.keys() {
+
+    for head in gkeys {
+        println!("{:?}", get_begin_end(parse_header(head.to_string())));
+    }
+
+    for head in akeys {
         println!("{:?}", parse_header(head.to_string()));
     }
 }
@@ -100,8 +105,9 @@ fn read_fasta<P>(filename: P) -> HashMap<String, String>
 where
     P: AsRef<Path>,
 {
+    let start = Instant::now();
     let file = File::open(filename).expect("Could not open file");
-    let gz = GzDecoder::new(file);
+    let gz = MultiGzDecoder::new(file);
     let buf = BufReader::new(gz);
     let mut fasta = HashMap::new();
     let mut curid = String::new();
@@ -113,35 +119,17 @@ where
                 fasta.insert(curid.clone(), curseq.clone());
                 curseq.clear();
             }
+            // println!("{:?}", &line[..].trim());
             curid = line[..].trim().to_string();
         } else {
             curseq.push_str(line.trim());
         }
     }
+    let duration = start.elapsed();
+    println!("It took {:?} to read decode and read fasta", duration);
     fasta
 }
 
-fn read_fasta2<P>(filename: P) -> HashMap<String, String>
-where
-    P: AsRef<Path>,
-{
-    let file = File::open(filename).expect("oof");
-    let gz = GzDecoder::new(file);
-    let buf = BufReader::new(gz);
-    let mut fasta = HashMap::new();
-    let mut curid = String::new();
-    let mut curseq = String::new();
-    for line in buf.lines() {
-        let line = line.expect("nope");
-        if line.starts_with('>') {
-            if !curid.is_empty() {
-                fasta.inster(curid.clone(), curseq.clone());
-                curseq.clear()
-        }
-        }
-        }
-    }
-}
 fn parse_header(header: String) -> Vec<String> {
     let sp = header.split(' ');
     let mut svec: Vec<String> = Vec::new();
@@ -150,3 +138,5 @@ fn parse_header(header: String) -> Vec<String> {
     }
     svec
 }
+
+fn get_begin_end(header: Vec<String>) {}
