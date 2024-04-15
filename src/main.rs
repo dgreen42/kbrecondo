@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::time::Instant;
 // use csv::Writer;
 use flate2::read::MultiGzDecoder;
-use std::array;
 use std::env;
 use std::fs::{read_dir, File};
 use std::io::{BufRead, BufReader};
@@ -28,18 +27,12 @@ fn main() {
     let decoanno = read_fasta(full_anno);
     let gkeys = decogeno.keys();
     let akeys = decoanno.keys();
-    let leng = gkeys.len();
-    let lena = akeys.len();
-    println!("{:?}", leng);
-    println!("{:?}", lena);
-
-    for head in gkeys {
-        println!("{:?}", get_begin_end(parse_header(head.to_string())));
+    let mut pheaders = Vec::new();
+    for header in akeys {
+        pheaders.push(get_begin_end_fg(header));
     }
 
-    for head in akeys {
-        println!("{:?}", parse_header(head.to_string()));
-    }
+    println!("{:?}", pheaders);
 }
 
 fn create_full_path(tdir: PathBuf, dir: String) -> PathBuf {
@@ -126,7 +119,7 @@ where
         }
     }
     let duration = start.elapsed();
-    println!("It took {:?} to read decode and read fasta", duration);
+    println!("It took {:?} to decode and read", duration);
     fasta
 }
 
@@ -136,7 +129,28 @@ fn parse_header(header: String) -> Vec<String> {
     for i in sp {
         svec.push(i.to_string());
     }
+
     svec
 }
 
-fn get_begin_end(header: Vec<String>) {}
+fn get_begin_end_fg(header: &String) -> Vec<String> {
+    let mut info: String = String::new();
+    let mut misc: String = String::new();
+    let mut all = Vec::new();
+    let sp = header.split(' ');
+
+    for idv in sp {
+        let mut hsp = idv.split("=");
+        match hsp.next() {
+            Some("gn") => info.push_str(idv),
+            Some("strand") => info.push_str(idv),
+            Some("begin") => info.push_str(idv),
+            Some("end") => info.push_str(idv),
+            Some(_) => misc.push_str(idv),
+            None => println!("Or this one"),
+        }
+    }
+    all.push(info);
+    all.push(misc);
+    all
+}
