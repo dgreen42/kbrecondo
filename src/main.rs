@@ -27,12 +27,12 @@ fn main() {
     let decoanno = read_fasta(full_anno);
     let gkeys = decogeno.keys();
     let akeys = decoanno.keys();
-    let mut pheaders = Vec::new();
-    for header in akeys {
-        pheaders.push(get_begin_end_fg(header));
-    }
 
-    println!("{:?}", pheaders);
+    for head in akeys {
+        let ph = parse_header(head.to_string());
+        let hinfo = get_begin_end_fg(ph);
+        println!("{:?}", hinfo);
+    }
 }
 
 fn create_full_path(tdir: PathBuf, dir: String) -> PathBuf {
@@ -133,21 +133,39 @@ fn parse_header(header: String) -> Vec<String> {
     svec
 }
 
-fn get_begin_end_fg(header: &String) -> Vec<String> {
+fn get_begin_end_fg(header: Vec<String>) -> Vec<String> {
     let mut info: String = String::new();
     let mut misc: String = String::new();
     let mut all = Vec::new();
-    let sp = header.split(' ');
 
-    for idv in sp {
+    for idv in header {
         let mut hsp = idv.split("=");
-        match hsp.next() {
-            Some("gn") => info.push_str(idv),
-            Some("strand") => info.push_str(idv),
-            Some("begin") => info.push_str(idv),
-            Some("end") => info.push_str(idv),
-            Some(_) => misc.push_str(idv),
-            None => println!("Or this one"),
+        if idv.starts_with('>') {
+            info.push_str(&idv);
+        } else {
+            match hsp.next() {
+                Some("gn") => {
+                    info.push_str(&idv);
+                    info.push_str(" ");
+                }
+                Some("strand") => {
+                    info.push_str(&idv);
+                    info.push_str(" ");
+                }
+                Some("begin") => {
+                    info.push_str(&idv);
+                    info.push_str(" ");
+                }
+                Some("end") => {
+                    info.push_str(&idv);
+                    info.push_str(" ");
+                }
+                Some(_) => {
+                    misc.push_str(&idv);
+                    misc.push_str(" ");
+                }
+                None => println!("Or this one"),
+            }
         }
     }
     all.push(info);
