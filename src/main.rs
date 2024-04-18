@@ -1,13 +1,14 @@
-use std::collections::HashMap;
-use std::time::Instant;
-// use csv::Writer;
+use csv::Writer;
 use flate2::read::MultiGzDecoder;
+use std::collections::HashMap;
 use std::env;
 use std::fs::{read_dir, File};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 
 fn main() {
+    let start = Instant::now();
     // let test_top1 = PathBuf::from("/home/david/Documents/Academic/UVM/Harris_Lab/Mt_sequences");
     let test_top2 = PathBuf::from("/media/david/WorkDrive/Documents/UVM/HarrisLab/Mt_Data");
     let genotype = env::args()
@@ -25,13 +26,56 @@ fn main() {
 
     let decogeno = read_fasta(full_geno);
     let decoanno = read_fasta(full_anno);
-    let gkeys = decogeno.keys();
-    let akeys = decoanno.keys();
 
-    for head in akeys {
-        let ph = parse_header(head.to_string());
-        let hinfo = get_begin_end_fg(ph);
-        println!("{:?}", hinfo);
+    let full_geno = collapse_lines(decogeno.clone());
+
+    create_csv(
+        decogeno,
+        String::from("geno"),
+        genotype.clone(),
+        test_top2.clone(),
+    );
+    create_csv(
+        decoanno,
+        String::from("anno"),
+        genotype.clone(),
+        test_top2.clone(),
+    );
+    let duration = start.elapsed();
+    println!("Total time to completion: {:?}", duration);
+}
+
+fn get_begin_end(genome: String, info: Vec<String>) {}
+
+fn collapse_lines(hash: HashMap<String, String>) -> String {
+    let seqs = hash.values();
+    let mut full = String::new();
+    for idv in seqs {
+        full.push_str(&idv);
+    }
+    full
+}
+
+fn create_csv(hash: HashMap<String, String>, file_type: String, name: String, path: PathBuf) {
+    let keys = hash.keys();
+    let mut csv_name = name;
+    csv_name.push_str(&file_type);
+    csv_name.push_str(".csv");
+    let csv_path = create_full_path(path.clone(), csv_name.clone());
+    if Path::new(&csv_path).exists() {
+        println!(
+            "{} exists, Please remove the file from the directory so it is not overwritten",
+            csv_name.clone()
+        );
+    } else {
+        let mut wrt = Writer::from_path(csv_path).expect("Did not write csv");
+        wrt.write_record(&["info", "misc"]);
+        for head in keys {
+            let ph = parse_header(head.to_string());
+            let hinfo = get_info(ph);
+
+            wrt.write_record(&hinfo).expect("Did not write line");
+        }
     }
 }
 
@@ -133,7 +177,7 @@ fn parse_header(header: String) -> Vec<String> {
     svec
 }
 
-fn get_begin_end_fg(header: Vec<String>) -> Vec<String> {
+fn get_info(header: Vec<String>) -> Vec<String> {
     let mut info: String = String::new();
     let mut misc: String = String::new();
     let mut all = Vec::new();
@@ -141,7 +185,9 @@ fn get_begin_end_fg(header: Vec<String>) -> Vec<String> {
     for idv in header {
         let mut hsp = idv.split("=");
         if idv.starts_with('>') {
+            info.push_str("id=");
             info.push_str(&idv);
+            info.push_str(" ");
         } else {
             match hsp.next() {
                 Some("gn") => {
@@ -157,6 +203,14 @@ fn get_begin_end_fg(header: Vec<String>) -> Vec<String> {
                     info.push_str(" ");
                 }
                 Some("end") => {
+                    info.push_str(&idv);
+                    info.push_str(" ");
+                }
+                Some("loc") => {
+                    info.push_str(&idv);
+                    info.push_str(" ");
+                }
+                Some("len") => {
                     info.push_str(&idv);
                     info.push_str(" ");
                 }
