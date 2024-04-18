@@ -27,7 +27,9 @@ fn main() {
     let decogeno = read_fasta(full_geno);
     let decoanno = read_fasta(full_anno);
 
-    let full_geno = collapse_lines(decogeno.clone());
+    let akeys = decoanno.keys();
+
+    let genome_seq = collapse_lines(decogeno.clone());
 
     create_csv(
         decogeno,
@@ -45,7 +47,50 @@ fn main() {
     println!("Total time to completion: {:?}", duration);
 }
 
-fn get_begin_end(genome: String, info: Vec<String>) {}
+fn get_begin_end(genome: String, info: Vec<String>) {
+    let imp = info[0].split(" ");
+    let mut begin = String::new();
+    let mut end = String::new();
+    let mut begend: Vec<i32> = Vec::new();
+    for i in imp {
+        if i.split("=").next == String::from("begin") {
+            begend.push(i.split("=").last());
+        }
+
+        if i.split("=").next.unwrap() == String::from("end") {
+            begend.push(i.split("=").last());
+        }
+    }
+
+    println!("{:?}", imp);
+    println!("{:?}", misc);
+}
+
+fn build_window(begin: i32, end: i32, size: i32) -> Vec<i32> {
+    let mut left_bound: i32 = begin - size;
+    let mut right_bound: i32 = begin + end;
+    let mut window: Vec<i32> = Vec::new();
+    window.push(left_bound);
+    window.push(right_bound);
+    window
+}
+
+fn search_seq(seq: String, window: Vec<i32>, pattern: String) {
+    let seq = seq.to_lowercase();
+    let pattern = pattern.to_lowercase();
+    let bseq = seq.as_bytes();
+    let bpat = pattern.as_bytes();
+    let left_bound = window[0];
+    let right_bound = window[1];
+
+    for i in 0..bseq.len() - bpat.len() {
+        if i < right_bound.try_into().unwrap() && i.try_into().unwrap() > left_bound {
+            if bpat == &bseq[i..i + bpat.len()] {
+                println!("It is there");
+            }
+        }
+    }
+}
 
 fn collapse_lines(hash: HashMap<String, String>) -> String {
     let seqs = hash.values();
