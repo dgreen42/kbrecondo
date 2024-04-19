@@ -2,12 +2,15 @@ use csv::Writer;
 use flate2::read::MultiGzDecoder;
 use std::collections::HashMap;
 use std::env;
+use std::f32::NAN;
 use std::fs::{read_dir, File};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 fn main() {
+    env::set_var("RUST_BACKTRACE", "0");
+
     let start = Instant::now();
     // let test_top1 = PathBuf::from("/home/david/Documents/Academic/UVM/Harris_Lab/Mt_sequences");
     let test_top2 = PathBuf::from("/media/david/WorkDrive/Documents/UVM/HarrisLab/Mt_Data");
@@ -27,48 +30,77 @@ fn main() {
     let decogeno = read_fasta(full_geno);
     let decoanno = read_fasta(full_anno);
 
+    let full_genome = chromosomes(decogeno);
+
     let akeys = decoanno.keys();
+    for key in akeys {
+        let begend = get_begin_end(get_info(parse_header(key.to_string())));
+    }
 
-    let genome_seq = collapse_lines(decogeno.clone());
-
-    create_csv(
-        decogeno,
-        String::from("geno"),
-        genotype.clone(),
-        test_top2.clone(),
-    );
-    create_csv(
-        decoanno,
-        String::from("anno"),
-        genotype.clone(),
-        test_top2.clone(),
-    );
     let duration = start.elapsed();
     println!("Total time to completion: {:?}", duration);
 }
 
-fn get_begin_end(genome: String, info: Vec<String>) {
-    let imp = info[0].split(" ");
-    let mut begin = String::new();
-    let mut end = String::new();
-    let mut begend: Vec<i32> = Vec::new();
-    for i in imp {
-        if i.split("=").next == String::from("begin") {
-            begend.push(i.split("=").last());
-        }
+fn chromosomes(hash: HashMap<String, String>) -> String {
+    let chrom = String::from(
+"MtrunA17Chr1,MtrunA17Chr2,MtrunA17Chr3,MtrunA17Chr4,MtrunA17Chr5,MtrunA17Chr6,MtrunA17Chr7,MtrunA17Chr8"
+    );
+    let mut full_genome = String::new();
+    let ckeys = hash.keys();
 
-        if i.split("=").next.unwrap() == String::from("end") {
-            begend.push(i.split("=").last());
+    for chm in chrom.split(",") {
+        for key in ckeys.clone() {
+            if key.to_string().contains(chm) {
+                let val = hash.get(key).unwrap();
+                full_genome.push_str(val);
+            }
         }
     }
 
-    println!("{:?}", imp);
-    println!("{:?}", misc);
+    full_genome
+}
+
+fn get_begin_end(info: Vec<String>) -> Vec<i32> {
+    let imp = info[0].split(" ");
+    let mut begend: Vec<i32> = Vec::new();
+    let mut begin = String::new();
+    let mut end = String::new();
+    let mut misc = String::new();
+    for fo in imp {
+        let fon = fo.split("=").next().unwrap();
+        let fol = fo.split("=").last().unwrap();
+        match fon {
+            "begin" => begin.push_str(&fol),
+            "end" => end.push_str(&fol),
+            _ => misc.push_str(&fol),
+        }
+    }
+
+    let ibegin = begin.to_string().trim().parse::<i32>().unwrap();
+    if !end.is_empty() {
+        let iend = end.to_string().trim().parse::<i32>().unwrap();
+        begend.push(iend);
+    } else {
+        begend.push(0);
+    }
+
+    begend.push(ibegin);
+    if begend[0] > begend[1] {
+        let n1 = begend[0];
+        let n0 = begend[1];
+        begend.clear();
+        begend.push(n0);
+        begend.push(n1);
+    }
+    if begend[0] > begend[1] {
+        println!("yeah");
+    }
+    begend
 }
 
 fn build_window(begin: i32, end: i32, size: i32) -> Vec<i32> {
-    let mut left_bound: i32 = begin - size;
-    let mut right_bound: i32 = begin + end;
+    let left_bound: i32 = begin - size;
+    let right_bound: i32 = begin + end;
     let mut window: Vec<i32> = Vec::new();
     window.push(left_bound);
     window.push(right_bound);
@@ -84,7 +116,7 @@ fn search_seq(seq: String, window: Vec<i32>, pattern: String) {
     let right_bound = window[1];
 
     for i in 0..bseq.len() - bpat.len() {
-        if i < right_bound.try_into().unwrap() && i.try_into().unwrap() > left_bound {
+        if seq == seq {
             if bpat == &bseq[i..i + bpat.len()] {
                 println!("It is there");
             }
@@ -267,7 +299,7 @@ fn get_info(header: Vec<String>) -> Vec<String> {
             }
         }
     }
-    all.push(info);
-    all.push(misc);
+    all.push(info.trim().to_string());
+    all.push(misc.trim().to_string());
     all
 }

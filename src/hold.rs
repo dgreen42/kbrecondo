@@ -1,0 +1,12 @@
+create_csv(
+        decogeno,
+        String::from("geno"),
+        genotype.clone(),
+        test_top2.clone(),
+    );
+    create_csv(
+        decoanno,
+        String::from("anno"),
+        genotype.clone(),
+        test_top2.clone(),
+    );
