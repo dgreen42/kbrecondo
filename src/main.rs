@@ -249,6 +249,7 @@ fn parse_header(header: String) -> Vec<String> {
     let mut svec: Vec<String> = Vec::new();
 
     for i in sp {
+        /* finish getting the definition into one element */
         if !i.contains("=") && !i.contains(">") {
             definition.push_str(i);
             definition.push_str(i);
