@@ -61,12 +61,12 @@ fn chromosomes(hash: HashMap<String, String>) -> String {
 }
 
 fn get_begin_end(info: Vec<String>) -> Vec<i32> {
-    let imp = info[0].split(" ");
+    let info_split = info[0].split(" ");
     let mut begend: Vec<i32> = Vec::new();
     let mut begin = String::new();
     let mut end = String::new();
     let mut misc = String::new();
-    for fo in imp {
+    for fo in info_split {
         let fon = fo.split("=").next().unwrap();
         let fol = fo.split("=").last().unwrap();
         match fon {
@@ -75,9 +75,8 @@ fn get_begin_end(info: Vec<String>) -> Vec<i32> {
             _ => misc.push_str(&fol),
         }
     }
-
     let ibegin = begin.to_string().trim().parse::<i32>().unwrap();
-    if !end.is_empty() {
+    if end != String::from(" ") {
         let iend = end.to_string().trim().parse::<i32>().unwrap();
         begend.push(iend);
     } else {
@@ -246,11 +245,19 @@ where
 
 fn parse_header(header: String) -> Vec<String> {
     let sp = header.split(' ');
+    let mut definition: String = String::new();
     let mut svec: Vec<String> = Vec::new();
-    for i in sp {
-        svec.push(i.to_string());
-    }
 
+    for i in sp {
+        if !i.contains("=") && !i.contains(">") {
+            definition.push_str(i);
+            definition.push_str(i);
+        } else {
+            svec.push(i.to_string());
+        }
+    }
+    svec.push(definition);
+    println!("{:?}", svec);
     svec
 }
 
