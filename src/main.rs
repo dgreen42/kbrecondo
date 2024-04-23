@@ -1,12 +1,12 @@
 use csv::Writer;
 use flate2::read::MultiGzDecoder;
 use std::collections::HashMap;
-use std::env;
 use std::f32::NAN;
 use std::fs::{read_dir, File};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
+use std::{env, usize};
 
 fn main() {
     env::set_var("RUST_BACKTRACE", "0");
@@ -16,7 +16,14 @@ fn main() {
     let test_top2 = PathBuf::from("/media/david/WorkDrive/Documents/UVM/HarrisLab/Mt_Data");
     let genotype = env::args()
         .nth(1)
-        .expect("please enter a valid genome name");
+        .expect("please enter a valid genome name (arg 1)");
+    let size_string = env::args()
+        .nth(2)
+        .expect("please enter the size for the search window (arg 2)");
+    let size = size_string.trim().parse::<i32>().unwrap();
+    let pattern = env::args()
+        .nth(3)
+        .expect("please enter the pattern to search for (arg 3)");
     // let top_dir = env::current_dir().expect("bad top dir");
     let genomes = create_full_path(test_top2.clone(), String::from("genomes"));
     let annotation = create_full_path(test_top2.clone(), String::from("annotations"));
@@ -34,7 +41,15 @@ fn main() {
 
     let akeys = decoanno.keys();
     for key in akeys {
-        let begend = get_begin_end(get_info(parse_header(key.to_string())));
+        let info = get_info(parse_header(key.to_string()));
+        let begend = get_begin_end(info.clone());
+        let window = build_window(begend[0], begend[1], size);
+        search_seq(
+            full_genome.clone(),
+            window,
+            pattern.clone(),
+            info.clone()[0],
+        );
     }
 
     let duration = start.elapsed();
@@ -62,10 +77,12 @@ fn chromosomes(hash: HashMap<String, String>) -> String {
 
 fn get_begin_end(info: Vec<String>) -> Vec<i32> {
     let info_split = info[0].split(" ");
+    println!("{:?}", info_split);
     let mut begend: Vec<i32> = Vec::new();
     let mut begin = String::new();
     let mut end = String::new();
     let mut misc = String::new();
+
     for fo in info_split {
         let fon = fo.split("=").next().unwrap();
         let fol = fo.split("=").last().unwrap();
@@ -75,25 +92,14 @@ fn get_begin_end(info: Vec<String>) -> Vec<i32> {
             _ => misc.push_str(&fol),
         }
     }
+
     let ibegin = begin.to_string().trim().parse::<i32>().unwrap();
-    if end != String::from(" ") {
-        let iend = end.to_string().trim().parse::<i32>().unwrap();
-        begend.push(iend);
-    } else {
-        begend.push(0);
-    }
+    let iend = end.to_string().trim().parse::<i32>().unwrap();
 
     begend.push(ibegin);
-    if begend[0] > begend[1] {
-        let n1 = begend[0];
-        let n0 = begend[1];
-        begend.clear();
-        begend.push(n0);
-        begend.push(n1);
-    }
-    if begend[0] > begend[1] {
-        println!("yeah");
-    }
+    begend.push(iend);
+    assert!(begend.len() == 2, "{:?} Did not pass", info[0]);
+    assert!(begend[0] < begend[1]);
     begend
 }
 
@@ -106,17 +112,18 @@ fn build_window(begin: i32, end: i32, size: i32) -> Vec<i32> {
     window
 }
 
-fn search_seq(seq: String, window: Vec<i32>, pattern: String) {
+fn search_seq(seq: String, window: Vec<i32>, pattern: String, ID: String) {
     let seq = seq.to_lowercase();
     let pattern = pattern.to_lowercase();
     let bseq = seq.as_bytes();
     let bpat = pattern.as_bytes();
-    let left_bound = window[0];
-    let right_bound = window[1];
+    let left_bound = window[0] as usize;
+    let right_bound = window[1] as usize;
+    let search_area = &bseq[left_bound..right_bound];
 
-    for i in 0..bseq.len() - bpat.len() {
-        if seq == seq {
-            if bpat == &bseq[i..i + bpat.len()] {
+    for i in 0..search_area.len() - bpat.len() {
+        if search_area == search_area {
+            if bpat == &search_area[i..i + bpat.len()] {
                 println!("It is there");
             }
         }
@@ -245,20 +252,28 @@ where
 
 fn parse_header(header: String) -> Vec<String> {
     let sp = header.split(' ');
-    let mut definition: String = String::new();
+    let mut definition_body: String = String::new();
     let mut svec: Vec<String> = Vec::new();
 
     for i in sp {
         /* finish getting the definition into one element */
         if !i.contains("=") && !i.contains(">") {
-            definition.push_str(i);
-            definition.push_str(i);
+            definition_body.push_str(i);
         } else {
             svec.push(i.to_string());
         }
     }
+    let mut definition: String = String::new();
+    for i in &svec {
+        if i.contains("def=") {
+            definition.push_str(&i);
+        }
+    }
+    definition.push_str(&definition_body);
+    if let Some(ind) = svec.iter().position(|val| val.contains("def=")) {
+        svec.swap_remove(ind);
+    }
     svec.push(definition);
-    println!("{:?}", svec);
     svec
 }
 
