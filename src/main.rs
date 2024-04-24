@@ -47,13 +47,7 @@ fn main() {
         println!("{:?}", id);
         let begend = get_begin_end(info.clone());
         let window = build_window(begend[0], begend[1], size);
-        search_seq(
-            full_genome.clone(),
-            window,
-            pattern.clone(),
-            id.to_string(),
-            strand,
-        );
+        search_seq(full_genome.clone(), window, pattern.clone(), strand);
     }
 
     let duration = start.elapsed();
@@ -108,24 +102,22 @@ fn get_begin_end(info: Vec<String>) -> Vec<i32> {
 
 fn build_window(begin: i32, end: i32, size: i32) -> Vec<i32> {
     let left_bound: i32 = begin - size;
-    let right_bound: i32 = begin + end;
+    let right_bound: i32 = end + size;
     let mut window: Vec<i32> = Vec::new();
     window.push(left_bound);
     window.push(right_bound);
     window
 }
 
-fn get_strand(info: Vec<String>) -> char {
+fn get_strand(info: Vec<String>) -> String {
     let info = &info[0];
     let info_sp = info.split(" ");
-    let strand_type = String::new();
+    let mut strand_type = String::new();
     for element in info_sp {
         if element.contains("strand") {
-            let sp = element.split("=").last().unwrap());
-            println!("{:?}", sp);
+            strand_type.push_str(element);
         }
     }
-    
     strand_type
 }
 
@@ -140,7 +132,8 @@ fn minus_strand_invsersion(seq: String, pat: String) -> Vec<String> {
             'c' => seq_inv.push_str("g"),
             't' => seq_inv.push_str("a"),
             'g' => seq_inv.push_str("c"),
-            _ => println!("This character is not a c g or t or it is not lowercase"),
+            'n' => seq_inv.push_str("n"),
+            _ => println!("This is not a nucleotide, or n"),
         }
     }
 
@@ -152,8 +145,9 @@ fn minus_strand_invsersion(seq: String, pat: String) -> Vec<String> {
     inversion
 }
 
-fn search_seq(seq: String, window: Vec<i32>, pattern: String, id: String, strand: char) {
-    if strand == '-' {
+fn search_seq(seq: String, window: Vec<i32>, pattern: String, strand: String) {
+    let strand = strand.split("=").last().unwrap();
+    if strand == "-" {
         let seq = seq.to_lowercase();
         let pattern = pattern.to_lowercase();
         let inversion = minus_strand_invsersion(seq, pattern);
@@ -165,7 +159,6 @@ fn search_seq(seq: String, window: Vec<i32>, pattern: String, id: String, strand
         let right_bound = window[1] as usize;
         let search_area = &bseq[left_bound..right_bound];
 
-        println!("{:?}", id);
         for i in 0..search_area.len() - bpat.len() {
             if bpat == &search_area[i..i + bpat.len()] {
                 let location = left_bound + i;
@@ -181,7 +174,6 @@ fn search_seq(seq: String, window: Vec<i32>, pattern: String, id: String, strand
         let right_bound = window[1] as usize;
         let search_area = &bseq[left_bound..right_bound];
 
-        println!("{:?}", id);
         for i in 0..search_area.len() - bpat.len() {
             if bpat == &search_area[i..i + bpat.len()] {
                 let location = left_bound + i;
