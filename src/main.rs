@@ -12,8 +12,8 @@ fn main() {
     env::set_var("RUST_BACKTRACE", "0");
 
     let start = Instant::now();
-    // let test_top1 = PathBuf::from("/home/david/Documents/Academic/UVM/Harris_Lab/Mt_sequences");
-    let test_top2 = PathBuf::from("/media/david/WorkDrive/Documents/UVM/HarrisLab/Mt_Data");
+    let test_top1 = PathBuf::from("/home/david/Documents/Academic/UVM/Harris_Lab/Mt_sequences");
+    // let test_top2 = PathBuf::from("/media/david/WorkDrive/Documents/UVM/HarrisLab/Mt_Data");
     let genotype = env::args()
         .nth(1)
         .expect("please enter a valid genome name (arg 1)");
@@ -25,8 +25,8 @@ fn main() {
         .nth(3)
         .expect("please enter the pattern to search for (arg 3)");
     // let top_dir = env::current_dir().expect("bad top dir");
-    let genomes = create_full_path(test_top2.clone(), String::from("genomes"));
-    let annotation = create_full_path(test_top2.clone(), String::from("annotations"));
+    let genomes = create_full_path(test_top1.clone(), String::from("genomes"));
+    let annotation = create_full_path(test_top1.clone(), String::from("annotations"));
     let dir_geno = get_name(genotype.clone(), genomes.clone());
     let dir_anno = get_name(genotype.clone(), annotation.clone());
     let full_geno = create_full_path(genomes.clone(), dir_geno.clone());
@@ -42,13 +42,17 @@ fn main() {
     let akeys = decoanno.keys();
     for key in akeys {
         let info = get_info(parse_header(key.to_string()));
+        let id = &info[0];
+        let strand = get_strand(info.clone());
+        println!("{:?}", id);
         let begend = get_begin_end(info.clone());
         let window = build_window(begend[0], begend[1], size);
         search_seq(
             full_genome.clone(),
             window,
             pattern.clone(),
-            info.clone()[0],
+            id.to_string(),
+            strand,
         );
     }
 
@@ -77,7 +81,6 @@ fn chromosomes(hash: HashMap<String, String>) -> String {
 
 fn get_begin_end(info: Vec<String>) -> Vec<i32> {
     let info_split = info[0].split(" ");
-    println!("{:?}", info_split);
     let mut begend: Vec<i32> = Vec::new();
     let mut begin = String::new();
     let mut end = String::new();
@@ -112,19 +115,77 @@ fn build_window(begin: i32, end: i32, size: i32) -> Vec<i32> {
     window
 }
 
-fn search_seq(seq: String, window: Vec<i32>, pattern: String, ID: String) {
-    let seq = seq.to_lowercase();
-    let pattern = pattern.to_lowercase();
-    let bseq = seq.as_bytes();
-    let bpat = pattern.as_bytes();
-    let left_bound = window[0] as usize;
-    let right_bound = window[1] as usize;
-    let search_area = &bseq[left_bound..right_bound];
+fn get_strand(info: Vec<String>) -> char {
+    let info = &info[0];
+    let info_sp = info.split(" ");
+    let strand_type = String::new();
+    for element in info_sp {
+        if element.contains("strand") {
+            let sp = element.split("=").last().unwrap());
+            println!("{:?}", sp);
+        }
+    }
+    
+    strand_type
+}
 
-    for i in 0..search_area.len() - bpat.len() {
-        if search_area == search_area {
+fn minus_strand_invsersion(seq: String, pat: String) -> Vec<String> {
+    let mut inversion: Vec<String> = Vec::new();
+    let mut seq_inv = String::new();
+    let pat_inv = pat.chars().rev().collect();
+
+    for nuc in seq.chars() {
+        match nuc {
+            'a' => seq_inv.push_str("t"),
+            'c' => seq_inv.push_str("g"),
+            't' => seq_inv.push_str("a"),
+            'g' => seq_inv.push_str("c"),
+            _ => println!("This character is not a c g or t or it is not lowercase"),
+        }
+    }
+
+    inversion.push(seq_inv);
+    inversion.push(pat_inv);
+
+    println!("Sequence and pattern inverted");
+
+    inversion
+}
+
+fn search_seq(seq: String, window: Vec<i32>, pattern: String, id: String, strand: char) {
+    if strand == '-' {
+        let seq = seq.to_lowercase();
+        let pattern = pattern.to_lowercase();
+        let inversion = minus_strand_invsersion(seq, pattern);
+        let seq = &inversion[0];
+        let pattern = &inversion[1];
+        let bseq = seq.as_bytes();
+        let bpat = pattern.as_bytes();
+        let left_bound = window[0] as usize;
+        let right_bound = window[1] as usize;
+        let search_area = &bseq[left_bound..right_bound];
+
+        println!("{:?}", id);
+        for i in 0..search_area.len() - bpat.len() {
             if bpat == &search_area[i..i + bpat.len()] {
-                println!("It is there");
+                let location = left_bound + i;
+                println!("Occurance at {}", location);
+            }
+        }
+    } else {
+        let seq = seq.to_lowercase();
+        let pattern = pattern.to_lowercase();
+        let bseq = seq.as_bytes();
+        let bpat = pattern.as_bytes();
+        let left_bound = window[0] as usize;
+        let right_bound = window[1] as usize;
+        let search_area = &bseq[left_bound..right_bound];
+
+        println!("{:?}", id);
+        for i in 0..search_area.len() - bpat.len() {
+            if bpat == &search_area[i..i + bpat.len()] {
+                let location = left_bound + i;
+                println!("Occurance at {}", location);
             }
         }
     }
