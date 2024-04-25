@@ -1,7 +1,6 @@
 use csv::Writer;
 use flate2::read::MultiGzDecoder;
 use std::collections::HashMap;
-use std::f32::NAN;
 use std::fs::{read_dir, File};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -12,8 +11,8 @@ fn main() {
     env::set_var("RUST_BACKTRACE", "0");
 
     let start = Instant::now();
-    let test_top1 = PathBuf::from("/home/david/Documents/Academic/UVM/Harris_Lab/Mt_sequences");
-    // let test_top2 = PathBuf::from("/media/david/WorkDrive/Documents/UVM/HarrisLab/Mt_Data");
+    // let test_top1 = PathBuf::from("/home/david/Documents/Academic/UVM/Harris_Lab/Mt_sequences");
+    let test_top2 = PathBuf::from("/media/david/WorkDrive/Documents/UVM/HarrisLab/Mt_Data");
     let genotype = env::args()
         .nth(1)
         .expect("please enter a valid genome name (arg 1)");
@@ -24,9 +23,12 @@ fn main() {
     let pattern = env::args()
         .nth(3)
         .expect("please enter the pattern to search for (arg 3)");
+    let name = env::args()
+        .nth(4)
+        .expect("please endter the name for the csv (arg 4)");
     // let top_dir = env::current_dir().expect("bad top dir");
-    let genomes = create_full_path(test_top1.clone(), String::from("genomes"));
-    let annotation = create_full_path(test_top1.clone(), String::from("annotations"));
+    let genomes = create_full_path(test_top2.clone(), String::from("genomes"));
+    let annotation = create_full_path(test_top2.clone(), String::from("annotations"));
     let dir_geno = get_name(genotype.clone(), genomes.clone());
     let dir_anno = get_name(genotype.clone(), annotation.clone());
     let full_geno = create_full_path(genomes.clone(), dir_geno.clone());
@@ -40,14 +42,41 @@ fn main() {
     let full_genome = chromosomes(decogeno);
 
     let akeys = decoanno.keys();
-    for key in akeys {
-        let info = get_info(parse_header(key.to_string()));
-        let id = &info[0];
-        let strand = get_strand(info.clone());
-        println!("{:?}", id);
-        let begend = get_begin_end(info.clone());
-        let window = build_window(begend[0], begend[1], size);
-        search_seq(full_genome.clone(), window, pattern.clone(), strand);
+    let mut counter = 0;
+
+    let mut csv_name = name;
+    csv_name.push_str("_");
+    csv_name.push_str(&pattern);
+    csv_name.push_str(".csv");
+    let csv_path = create_full_path(test_top2.clone(), csv_name.clone());
+    if Path::new(&csv_path).exists() {
+        println!(
+            "{} exists, Please remove the file from the directory so it is not overwritten",
+            csv_name.clone()
+        );
+    } else {
+        let mut wrt = Writer::from_path(csv_path).expect("Did not write csv");
+        let _ = wrt.write_record(&[
+            "id",
+            "length",
+            "begin",
+            "end",
+            "strand",
+            "occurance.location",
+            "info",
+        ]);
+
+        for key in akeys {
+            counter += 1;
+            let info = get_info(parse_header(key.to_string()));
+            let id = &info[0];
+            let strand = get_strand(info.clone());
+            println!("{}: {:?}", counter, id);
+            let begend = get_begin_end(info.clone());
+            let window = build_window(begend[0], begend[1], size);
+            let occrances = search_seq(full_genome.clone(), window, pattern.clone(), strand);
+            create_csv(&mut wrt, info.clone(), occrances);
+        }
     }
 
     let duration = start.elapsed();
@@ -145,8 +174,9 @@ fn minus_strand_invsersion(seq: String, pat: String) -> Vec<String> {
     inversion
 }
 
-fn search_seq(seq: String, window: Vec<i32>, pattern: String, strand: String) {
+fn search_seq(seq: String, window: Vec<i32>, pattern: String, strand: String) -> Vec<String> {
     let strand = strand.split("=").last().unwrap();
+    let mut occurances: Vec<String> = Vec::new();
     if strand == "-" {
         let seq = seq.to_lowercase();
         let pattern = pattern.to_lowercase();
@@ -178,9 +208,11 @@ fn search_seq(seq: String, window: Vec<i32>, pattern: String, strand: String) {
             if bpat == &search_area[i..i + bpat.len()] {
                 let location = left_bound + i;
                 println!("Occurance at {}", location);
+                occurances.push(location.to_string());
             }
         }
     }
+    occurances
 }
 
 fn collapse_lines(hash: HashMap<String, String>) -> String {
@@ -192,26 +224,59 @@ fn collapse_lines(hash: HashMap<String, String>) -> String {
     full
 }
 
-fn create_csv(hash: HashMap<String, String>, file_type: String, name: String, path: PathBuf) {
-    let keys = hash.keys();
-    let mut csv_name = name;
-    csv_name.push_str(&file_type);
-    csv_name.push_str(".csv");
-    let csv_path = create_full_path(path.clone(), csv_name.clone());
-    if Path::new(&csv_path).exists() {
-        println!(
-            "{} exists, Please remove the file from the directory so it is not overwritten",
-            csv_name.clone()
-        );
-    } else {
-        let mut wrt = Writer::from_path(csv_path).expect("Did not write csv");
-        wrt.write_record(&["info", "misc"]);
-        for head in keys {
-            let ph = parse_header(head.to_string());
-            let hinfo = get_info(ph);
-
-            wrt.write_record(&hinfo).expect("Did not write line");
+fn create_csv(writer: &mut Writer<File>, info: Vec<String>, occurances: Vec<String>) {
+    /*
+        let mut csv_name = name;
+        csv_name.push_str(&pattern);
+        csv_name.push_str(".csv");
+        let csv_path = create_full_path(path.clone(), csv_name.clone());
+        if Path::new(&csv_path).exists() {
+            println!(
+                "{} exists, Please remove the file from the directory so it is not overwritten",
+                csv_name.clone()
+            );
+        } else {
+            let mut wrt = Writer::from_path(csv_path).expect("Did not write csv");
+            let _ = wrt.write_record(&[
+                "id",
+                "length",
+                "begin",
+                "end",
+                "strand",
+                "occurance.location",
+                "info",
+            ]);
+    */
+    let mut id = String::new();
+    let mut strand = String::new();
+    let mut length = String::new();
+    let mut begin = String::new();
+    let mut end = String::new();
+    let def_info = &info[1];
+    let mut misc = String::new();
+    let info = info[0].split(" ");
+    for i in info {
+        let sp1 = i.split("=").next().unwrap();
+        let sp2 = i.split("=").last().unwrap();
+        match sp1 {
+            "begin" => begin.push_str(sp1),
+            "end" => end.push_str(sp1),
+            "len" => length.push_str(sp1),
+            "strand" => strand.push_str(sp1),
+            "id" => id.push_str(sp1),
+            _ => misc.push_str(sp2),
         }
+    }
+    for occurance in occurances {
+        let _ = writer.write_record(&[
+            id.clone(),
+            length.clone(),
+            begin.clone(),
+            end.clone(),
+            strand.clone(),
+            occurance,
+            def_info.to_string(),
+        ]);
     }
 }
 
