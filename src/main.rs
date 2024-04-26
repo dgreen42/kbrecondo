@@ -11,8 +11,6 @@ fn main() {
     env::set_var("RUST_BACKTRACE", "0");
 
     let start = Instant::now();
-    let test_top1 = PathBuf::from("/home/david/Documents/Academic/UVM/Harris_Lab/test_genomes");
-    //let test_top2 = PathBuf::from("/media/david/WorkDrive/Documents/UVM/HarrisLab/Mt_Data");
     let genotype = env::args()
         .nth(1)
         .expect("please enter a valid genome name (arg 1)");
@@ -26,9 +24,9 @@ fn main() {
     let name = env::args()
         .nth(4)
         .expect("please endter the name for the csv (arg 4)");
-    // let top_dir = env::current_dir().expect("bad top dir");
-    let genomes = create_full_path(test_top1.clone(), String::from("genomes"));
-    let annotation = create_full_path(test_top1.clone(), String::from("annotations"));
+    let top_dir = env::current_dir().expect("bad top dir");
+    let genomes = create_full_path(top_dir.clone(), String::from("genomes"));
+    let annotation = create_full_path(top_dir.clone(), String::from("annotations"));
     let dir_geno = get_name(genotype.clone(), genomes.clone());
     let dir_anno = get_name(genotype.clone(), annotation.clone());
     let full_geno = create_full_path(genomes.clone(), dir_geno.clone());
@@ -48,7 +46,7 @@ fn main() {
     csv_name.push_str("_");
     csv_name.push_str(&pattern);
     csv_name.push_str(".csv");
-    let csv_path = create_full_path(test_top1.clone(), csv_name.clone());
+    let csv_path = create_full_path(top_dir.clone(), csv_name.clone());
     if Path::new(&csv_path).exists() {
         println!(
             "{} exists, Please remove the file from the directory so it is not overwritten",
@@ -75,13 +73,24 @@ fn main() {
             println!("{}: {:?}", counter, id);
             let begend = get_begin_end(info.clone());
             let window = build_window(begend[0], begend[1], size);
-            let occrances = search_seq(full_genome.clone(), window, pattern.clone(), strand);
+            let occrances = search_seq(
+                full_genome.clone(),
+                window,
+                pattern.clone(),
+                strand,
+                start.clone(),
+            );
             write_csv(&mut wrt, info.clone(), occrances);
         }
     }
 
     let duration = start.elapsed();
-    println!("Total time to completion: {:?}", duration);
+    let duration_minutes = duration.as_secs() / 60;
+    let duration_remainder = duration.as_secs() % 60;
+    println!(
+        "Total time to completion: {:?}, minutes and {:?} seconds",
+        duration_minutes, duration_remainder
+    );
 }
 
 fn chromosomes(hash: HashMap<String, String>) -> String {
@@ -131,11 +140,18 @@ fn get_begin_end(info: Vec<String>) -> Vec<i32> {
 }
 
 fn build_window(begin: i32, end: i32, size: i32) -> Vec<i32> {
-    let left_bound: i32 = begin - size;
-    let right_bound: i32 = end + size;
     let mut window: Vec<i32> = Vec::new();
-    window.push(left_bound);
-    window.push(right_bound);
+    if begin < size {
+        let left_bound: i32 = (begin + 1) - begin;
+        let right_bound: i32 = end + size;
+        window.push(left_bound);
+        window.push(right_bound);
+    } else {
+        let left_bound: i32 = begin - size;
+        let right_bound: i32 = end + size;
+        window.push(left_bound);
+        window.push(right_bound);
+    }
     window
 }
 
@@ -155,7 +171,7 @@ fn minus_strand_invsersion(seq: String, pat: String) -> Vec<String> {
     let mut inversion: Vec<String> = Vec::new();
     let mut seq_inv = String::new();
     let pat_inv = pat.chars().rev().collect();
-
+    // instead of inveerting the entire sequence, just invert the and reverse it
     for nuc in seq.chars() {
         match nuc {
             'a' => seq_inv.push_str("t"),
@@ -175,7 +191,13 @@ fn minus_strand_invsersion(seq: String, pat: String) -> Vec<String> {
     inversion
 }
 
-fn search_seq(seq: String, window: Vec<i32>, pattern: String, strand: String) -> Vec<String> {
+fn search_seq(
+    seq: String,
+    window: Vec<i32>,
+    pattern: String,
+    strand: String,
+    timer: Instant,
+) -> Vec<String> {
     let strand = strand.split("=").last().unwrap();
     let mut occurances: Vec<String> = Vec::new();
     if strand == "-" {
@@ -194,6 +216,7 @@ fn search_seq(seq: String, window: Vec<i32>, pattern: String, strand: String) ->
             if bpat == &search_area[i..i + bpat.len()] {
                 let location = left_bound + i;
                 println!("Occurance at {}", location);
+                occurances.push(location.to_string());
             }
         }
     } else {
@@ -213,6 +236,13 @@ fn search_seq(seq: String, window: Vec<i32>, pattern: String, strand: String) ->
             }
         }
     }
+    let duration = timer.elapsed().as_secs();
+    let duration_minutes = duration / 60;
+    let duration_remainder = duration % 60;
+    println!(
+        "It has been {:?} minutes and {:?} seconds",
+        duration_minutes, duration_remainder
+    );
     occurances
 }
 
@@ -226,28 +256,6 @@ fn collapse_lines(hash: HashMap<String, String>) -> String {
 }
 
 fn write_csv(writer: &mut Writer<File>, info: Vec<String>, occurances: Vec<String>) {
-    /*
-        let mut csv_name = name;
-        csv_name.push_str(&pattern);
-        csv_name.push_str(".csv");
-        let csv_path = create_full_path(path.clone(), csv_name.clone());
-        if Path::new(&csv_path).exists() {
-            println!(
-                "{} exists, Please remove the file from the directory so it is not overwritten",
-                csv_name.clone()
-            );
-        } else {
-            let mut wrt = Writer::from_path(csv_path).expect("Did not write csv");
-            let _ = wrt.write_record(&[
-                "id",
-                "length",
-                "begin",
-                "end",
-                "strand",
-                "occurance.location",
-                "info",
-            ]);
-    */
     let mut id = String::new();
     let mut strand = String::new();
     let mut length = String::new();
