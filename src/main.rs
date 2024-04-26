@@ -11,8 +11,8 @@ fn main() {
     env::set_var("RUST_BACKTRACE", "0");
 
     let start = Instant::now();
-    // let test_top1 = PathBuf::from("/home/david/Documents/Academic/UVM/Harris_Lab/Mt_sequences");
-    let test_top2 = PathBuf::from("/media/david/WorkDrive/Documents/UVM/HarrisLab/Mt_Data");
+    let test_top1 = PathBuf::from("/home/david/Documents/Academic/UVM/Harris_Lab/test_genomes");
+    //let test_top2 = PathBuf::from("/media/david/WorkDrive/Documents/UVM/HarrisLab/Mt_Data");
     let genotype = env::args()
         .nth(1)
         .expect("please enter a valid genome name (arg 1)");
@@ -27,8 +27,8 @@ fn main() {
         .nth(4)
         .expect("please endter the name for the csv (arg 4)");
     // let top_dir = env::current_dir().expect("bad top dir");
-    let genomes = create_full_path(test_top2.clone(), String::from("genomes"));
-    let annotation = create_full_path(test_top2.clone(), String::from("annotations"));
+    let genomes = create_full_path(test_top1.clone(), String::from("genomes"));
+    let annotation = create_full_path(test_top1.clone(), String::from("annotations"));
     let dir_geno = get_name(genotype.clone(), genomes.clone());
     let dir_anno = get_name(genotype.clone(), annotation.clone());
     let full_geno = create_full_path(genomes.clone(), dir_geno.clone());
@@ -48,7 +48,7 @@ fn main() {
     csv_name.push_str("_");
     csv_name.push_str(&pattern);
     csv_name.push_str(".csv");
-    let csv_path = create_full_path(test_top2.clone(), csv_name.clone());
+    let csv_path = create_full_path(test_top1.clone(), csv_name.clone());
     if Path::new(&csv_path).exists() {
         println!(
             "{} exists, Please remove the file from the directory so it is not overwritten",
@@ -56,7 +56,7 @@ fn main() {
         );
     } else {
         let mut wrt = Writer::from_path(csv_path).expect("Did not write csv");
-        let _ = wrt.write_record(&[
+        wrt.write_record(&[
             "id",
             "length",
             "begin",
@@ -64,7 +64,8 @@ fn main() {
             "strand",
             "occurance.location",
             "info",
-        ]);
+        ])
+        .expect("Did not write fist line");
 
         for key in akeys {
             counter += 1;
@@ -75,7 +76,7 @@ fn main() {
             let begend = get_begin_end(info.clone());
             let window = build_window(begend[0], begend[1], size);
             let occrances = search_seq(full_genome.clone(), window, pattern.clone(), strand);
-            create_csv(&mut wrt, info.clone(), occrances);
+            write_csv(&mut wrt, info.clone(), occrances);
         }
     }
 
@@ -224,7 +225,7 @@ fn collapse_lines(hash: HashMap<String, String>) -> String {
     full
 }
 
-fn create_csv(writer: &mut Writer<File>, info: Vec<String>, occurances: Vec<String>) {
+fn write_csv(writer: &mut Writer<File>, info: Vec<String>, occurances: Vec<String>) {
     /*
         let mut csv_name = name;
         csv_name.push_str(&pattern);
@@ -259,24 +260,27 @@ fn create_csv(writer: &mut Writer<File>, info: Vec<String>, occurances: Vec<Stri
         let sp1 = i.split("=").next().unwrap();
         let sp2 = i.split("=").last().unwrap();
         match sp1 {
-            "begin" => begin.push_str(sp1),
-            "end" => end.push_str(sp1),
-            "len" => length.push_str(sp1),
-            "strand" => strand.push_str(sp1),
-            "id" => id.push_str(sp1),
+            "begin" => begin.push_str(sp2),
+            "end" => end.push_str(sp2),
+            "len" => length.push_str(sp2),
+            "strand" => strand.push_str(sp2),
+            "id" => id.push_str(sp2),
             _ => misc.push_str(sp2),
         }
     }
-    for occurance in occurances {
-        let _ = writer.write_record(&[
-            id.clone(),
-            length.clone(),
-            begin.clone(),
-            end.clone(),
-            strand.clone(),
-            occurance,
-            def_info.to_string(),
-        ]);
+    let mut record: Vec<String> = Vec::new();
+    for i in occurances.iter() {
+        record.push(id.clone());
+        record.push(length.clone());
+        record.push(begin.clone());
+        record.push(end.clone());
+        record.push(strand.clone());
+        record.push(i.to_string());
+        record.push(def_info.to_string());
+        writer
+            .write_record(record.clone())
+            .expect("Did not write record");
+        record.clear();
     }
 }
 
