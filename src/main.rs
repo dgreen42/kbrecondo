@@ -37,11 +37,17 @@ fn main() {
     let decogeno = read_fasta(full_geno);
     let decoanno = read_fasta(full_anno);
 
-    let full_genome = chromosomes(decogeno);
+    //can't do this. need to rewrite and have the searches be on the correct chromosome.
+    //to do this we can use the chomosome from the gene name to select the correct gene from the
+    //fasta to search on.
+    // this is the old code use not going  to delete the function for it yet
+    // let full_genome = chromosomes(decogeno);
 
     let akeys = decoanno.keys();
+    let gkeys = decogeno.keys();
     let mut counter = 0;
 
+    // std::process::exit(1);
     let mut csv_name = name;
     csv_name.push_str("_");
     csv_name.push_str(&pattern);
@@ -65,22 +71,45 @@ fn main() {
         ])
         .expect("Did not write fist line");
 
-        for key in akeys {
-            counter += 1;
-            let info = get_info(parse_header(key.to_string()));
-            let id = &info[0];
-            let strand = get_strand(info.clone());
-            println!("{}: {:?}", counter, id);
-            let begend = get_begin_end(info.clone());
-            let window = build_window(begend[0], begend[1], size);
-            let occrances = search_seq(
-                full_genome.clone(),
-                window,
-                pattern.clone(),
-                strand,
-                start.clone(),
-            );
-            write_csv(&mut wrt, info.clone(), occrances);
+        for gk in gkeys {
+            let info_geno = get_info(parse_header(gk.to_string()));
+            let acc = get_element(info_geno.clone(), String::from("acc"));
+            let chromosome = acc.split("=").last().unwrap();
+
+            for ak in akeys.clone() {
+                let info_anno = get_info(parse_header(ak.to_string()));
+                let chrom = get_element(info_anno.clone(), String::from("chr"));
+                let spchrom = chrom.split("=").last().unwrap();
+                // come back to this and see if it makes sense. Not sure that the chromosomes that
+                // are used in the ladder assert! are differnet, try to reason about why this test
+                // makes sense
+                // !! I may have done this because it is taking the length from the actual sequence
+                // and comparing it to the length that we are getting from the header.
+                // I'm high right now so please come back and check this
+                let chrom_len = get_element(info_geno.clone(), String::from("len"));
+                let spchrom_len = chrom_len.split("=").last().unwrap();
+                let chrom_len_num = spchrom_len.to_string().parse::<i32>().unwrap();
+
+                if chromosome == spchrom {
+                    let chrom_seq = decogeno.get_key_value(gk).unwrap().1;
+                    let chrom_seq_len = chrom_seq.len() as i32;
+                    assert!(chrom_seq_len == chrom_len_num);
+                    counter += 1;
+                    let header = &info_anno[0];
+                    println!("{}: {:?}", counter, header);
+                    let strand = get_element(info_anno.clone(), String::from("strand"));
+                    let begend = get_begin_end(info_anno.clone());
+                    let window = build_window(begend[0], begend[1], size, chrom_seq_len);
+                    let occrances = search_seq(
+                        chrom_seq.to_string(),
+                        window,
+                        pattern.clone(),
+                        strand,
+                        start.clone(),
+                    );
+                    write_csv(&mut wrt, info_anno.clone(), occrances);
+                }
+            }
         }
     }
 
@@ -91,25 +120,6 @@ fn main() {
         "Total time to completion: {:?}, minutes and {:?} seconds",
         duration_minutes, duration_remainder
     );
-}
-
-fn chromosomes(hash: HashMap<String, String>) -> String {
-    let chrom = String::from(
-"MtrunA17Chr1,MtrunA17Chr2,MtrunA17Chr3,MtrunA17Chr4,MtrunA17Chr5,MtrunA17Chr6,MtrunA17Chr7,MtrunA17Chr8"
-    );
-    let mut full_genome = String::new();
-    let ckeys = hash.keys();
-
-    for chm in chrom.split(",") {
-        for key in ckeys.clone() {
-            if key.to_string().contains(chm) {
-                let val = hash.get(key).unwrap();
-                full_genome.push_str(val);
-            }
-        }
-    }
-
-    full_genome
 }
 
 fn get_begin_end(info: Vec<String>) -> Vec<i32> {
@@ -139,54 +149,52 @@ fn get_begin_end(info: Vec<String>) -> Vec<i32> {
     begend
 }
 
-fn build_window(begin: i32, end: i32, size: i32) -> Vec<i32> {
+fn build_window(begin: i32, end: i32, size: i32, seq_len: i32) -> Vec<i32> {
     let mut window: Vec<i32> = Vec::new();
     if begin < size {
         let left_bound: i32 = (begin + 1) - begin;
-        let right_bound: i32 = end + size;
+        //let right_bound: i32 = end + size;
         window.push(left_bound);
-        window.push(right_bound);
+        //window.push(right_bound);
+        if end > size {}
     } else {
         let left_bound: i32 = begin - size;
-        let right_bound: i32 = end + size;
+        //let right_bound: i32 = end + size;
         window.push(left_bound);
-        window.push(right_bound);
+        //window.push(right_bound);
+        if end > size {}
     }
     window
 }
 
-fn get_strand(info: Vec<String>) -> String {
+fn get_element(info: Vec<String>, element: String) -> String {
     let info = &info[0];
     let info_sp = info.split(" ");
-    let mut strand_type = String::new();
-    for element in info_sp {
-        if element.contains("strand") {
-            strand_type.push_str(element);
+    let mut element_type = String::new();
+    for i in info_sp {
+        if i.contains(&element) {
+            element_type.push_str(i);
         }
     }
-    strand_type
+    element_type
 }
 
-fn minus_strand_invsersion(seq: String, pat: String) -> Vec<String> {
-    let mut inversion: Vec<String> = Vec::new();
-    let mut seq_inv = String::new();
-    let pat_inv = pat.chars().rev().collect();
+fn minus_strand_invsersion(pat: String) -> String {
+    let mut inversion = String::new();
+    let pat_inv: String = pat.chars().rev().collect();
     // instead of inveerting the entire sequence, just invert the and reverse it
-    for nuc in seq.chars() {
+    for nuc in pat_inv.chars() {
         match nuc {
-            'a' => seq_inv.push_str("t"),
-            'c' => seq_inv.push_str("g"),
-            't' => seq_inv.push_str("a"),
-            'g' => seq_inv.push_str("c"),
-            'n' => seq_inv.push_str("n"),
+            'a' => inversion.push_str("t"),
+            'c' => inversion.push_str("g"),
+            't' => inversion.push_str("a"),
+            'g' => inversion.push_str("c"),
+            'n' => inversion.push_str("n"),
             _ => println!("This is not a nucleotide, or n"),
         }
     }
 
-    inversion.push(seq_inv);
-    inversion.push(pat_inv);
-
-    println!("Sequence and pattern inverted");
+    println!("Pattern inverted");
 
     inversion
 }
@@ -203,9 +211,8 @@ fn search_seq(
     if strand == "-" {
         let seq = seq.to_lowercase();
         let pattern = pattern.to_lowercase();
-        let inversion = minus_strand_invsersion(seq, pattern);
-        let seq = &inversion[0];
-        let pattern = &inversion[1];
+        let inversion = minus_strand_invsersion(pattern);
+        let pattern = inversion;
         let bseq = seq.as_bytes();
         let bpat = pattern.as_bytes();
         let left_bound = window[0] as usize;
@@ -215,7 +222,6 @@ fn search_seq(
         for i in 0..search_area.len() - bpat.len() {
             if bpat == &search_area[i..i + bpat.len()] {
                 let location = left_bound + i;
-                println!("Occurance at {}", location);
                 occurances.push(location.to_string());
             }
         }
@@ -231,7 +237,6 @@ fn search_seq(
         for i in 0..search_area.len() - bpat.len() {
             if bpat == &search_area[i..i + bpat.len()] {
                 let location = left_bound + i;
-                println!("Occurance at {}", location);
                 occurances.push(location.to_string());
             }
         }
@@ -441,6 +446,14 @@ fn get_info(header: Vec<String>) -> Vec<String> {
                     info.push_str(" ");
                 }
                 Some("len") => {
+                    info.push_str(&idv);
+                    info.push_str(" ");
+                }
+                Some("chr") => {
+                    info.push_str(&idv);
+                    info.push_str(" ");
+                }
+                Some("acc") => {
                     info.push_str(&idv);
                     info.push_str(" ");
                 }
