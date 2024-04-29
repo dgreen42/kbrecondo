@@ -24,35 +24,51 @@ fn main() {
     let name = env::args()
         .nth(4)
         .expect("please endter the name for the csv (arg 4)");
+    let seq_type = env::args()
+        .nth(5)
+        .expect("please endter the type of sequence you are searching around (arg 5)");
+    let species = env::args()
+        .nth(6)
+        .expect("please endter the species tag (arg 6)");
     let top_dir = env::current_dir().expect("bad top dir");
     let genomes = create_full_path(top_dir.clone(), String::from("genomes"));
     let annotation = create_full_path(top_dir.clone(), String::from("annotations"));
-    let dir_geno = get_name(genotype.clone(), genomes.clone());
-    let dir_anno = get_name(genotype.clone(), annotation.clone());
+    let dir_geno = get_name(
+        genotype.clone(),
+        genomes.clone(),
+        seq_type.clone(),
+        species.clone(),
+    );
+    let dir_anno = get_name(
+        genotype.clone(),
+        annotation.clone(),
+        seq_type.clone(),
+        species.clone(),
+    );
     let full_geno = create_full_path(genomes.clone(), dir_geno.clone());
     let full_anno = create_full_path(annotation.clone(), dir_anno.clone());
+    println!("{:?}", full_geno);
+    println!("{:?}", full_anno);
     assert!(Path::new(&full_anno).exists());
     assert!(Path::new(&full_geno).exists());
 
     let decogeno = read_fasta(full_geno);
     let decoanno = read_fasta(full_anno);
 
-    //can't do this. need to rewrite and have the searches be on the correct chromosome.
-    //to do this we can use the chomosome from the gene name to select the correct gene from the
-    //fasta to search on.
-    // this is the old code use not going  to delete the function for it yet
-    // let full_genome = chromosomes(decogeno);
-
     let akeys = decoanno.keys();
     let gkeys = decogeno.keys();
-    let mut counter = 0;
 
     // std::process::exit(1);
     let mut csv_name = name;
     csv_name.push_str("_");
     csv_name.push_str(&pattern);
+    csv_name.push_str("_");
+    csv_name.push_str(&seq_type);
+    csv_name.push_str("_");
+    csv_name.push_str(&species);
     csv_name.push_str(".csv");
     let csv_path = create_full_path(top_dir.clone(), csv_name.clone());
+
     if Path::new(&csv_path).exists() {
         println!(
             "{} exists, Please remove the file from the directory so it is not overwritten",
@@ -94,22 +110,24 @@ fn main() {
                     let chrom_seq = decogeno.get_key_value(gk).unwrap().1;
                     let chrom_seq_len = chrom_seq.len() as i32;
                     assert!(chrom_seq_len == chrom_len_num);
-                    counter += 1;
                     let header = &info_anno[0];
-                    println!("{}: {:?}", counter, header);
                     let strand = get_element(info_anno.clone(), String::from("strand"));
                     let begend = get_begin_end(info_anno.clone());
                     let window = build_window(begend[0], begend[1], size, chrom_seq_len);
-                    let occrances = search_seq(
-                        chrom_seq.to_string(),
-                        window,
-                        pattern.clone(),
-                        strand,
-                        start.clone(),
-                    );
+                    let occrances =
+                        search_seq(chrom_seq.to_string(), window, pattern.clone(), strand);
                     write_csv(&mut wrt, info_anno.clone(), occrances);
                 }
             }
+            let dur = start.elapsed();
+            let dur_minutes = dur.as_secs() / 60;
+            let dur_remainder = dur.as_secs() % 60;
+            println!(
+                "Time to complete {} search: {:?}, minutes and {:?} seconds",
+                gk.to_string(),
+                dur_minutes,
+                dur_remainder
+            );
         }
     }
 
@@ -149,20 +167,30 @@ fn get_begin_end(info: Vec<String>) -> Vec<i32> {
     begend
 }
 
-fn build_window(begin: i32, end: i32, size: i32, seq_len: i32) -> Vec<i32> {
+fn build_window(begin: i32, end: i32, window_size: i32, seq_len: i32) -> Vec<i32> {
     let mut window: Vec<i32> = Vec::new();
-    if begin < size {
+    if begin < window_size {
         let left_bound: i32 = (begin + 1) - begin;
-        //let right_bound: i32 = end + size;
         window.push(left_bound);
-        //window.push(right_bound);
-        if end > size {}
+        if end + window_size > seq_len {
+            let window_end_diff = (end + window_size) - seq_len;
+            let right_bound: i32 = (end + window_size) - window_end_diff;
+            window.push(right_bound);
+        } else {
+            let right_bound: i32 = end + window_size;
+            window.push(right_bound);
+        }
     } else {
-        let left_bound: i32 = begin - size;
-        //let right_bound: i32 = end + size;
+        let left_bound: i32 = begin - window_size;
         window.push(left_bound);
-        //window.push(right_bound);
-        if end > size {}
+        if end + window_size > seq_len {
+            let window_end_diff = (end + window_size) - seq_len;
+            let right_bound: i32 = (end + window_size) - window_end_diff;
+            window.push(right_bound);
+        } else {
+            let right_bound: i32 = end + window_size;
+            window.push(right_bound);
+        }
     }
     window
 }
@@ -194,18 +222,10 @@ fn minus_strand_invsersion(pat: String) -> String {
         }
     }
 
-    println!("Pattern inverted");
-
     inversion
 }
 
-fn search_seq(
-    seq: String,
-    window: Vec<i32>,
-    pattern: String,
-    strand: String,
-    timer: Instant,
-) -> Vec<String> {
+fn search_seq(seq: String, window: Vec<i32>, pattern: String, strand: String) -> Vec<String> {
     let strand = strand.split("=").last().unwrap();
     let mut occurances: Vec<String> = Vec::new();
     if strand == "-" {
@@ -241,23 +261,7 @@ fn search_seq(
             }
         }
     }
-    let duration = timer.elapsed().as_secs();
-    let duration_minutes = duration / 60;
-    let duration_remainder = duration % 60;
-    println!(
-        "It has been {:?} minutes and {:?} seconds",
-        duration_minutes, duration_remainder
-    );
     occurances
-}
-
-fn collapse_lines(hash: HashMap<String, String>) -> String {
-    let seqs = hash.values();
-    let mut full = String::new();
-    for idv in seqs {
-        full.push_str(&idv);
-    }
-    full
 }
 
 fn write_csv(writer: &mut Writer<File>, info: Vec<String>, occurances: Vec<String>) {
@@ -304,10 +308,12 @@ fn create_full_path(tdir: PathBuf, dir: String) -> PathBuf {
     PathBuf::from(s_dir)
 }
 
-fn get_name(pat: String, search_dir: PathBuf) -> String {
+fn get_name(pat: String, search_dir: PathBuf, seq_type: String, species: String) -> String {
     let mut patmatch = String::new();
     let mut mdir = String::new();
-    let mut fdir = String::from("/medtr.");
+    let mut fdir = String::from("/");
+    fdir.push_str(&species);
+    fdir.push_str(".");
     if let Ok(files) = read_dir(search_dir.clone()) {
         for file in files {
             let sdir = file.unwrap().path().into_os_string().into_string().unwrap();
@@ -347,7 +353,9 @@ fn get_name(pat: String, search_dir: PathBuf) -> String {
         == String::from("annotations")
     {
         fdir.push_str(&mdir);
-        fdir.push_str(".cds.fna.gz");
+        fdir.push_str(".");
+        fdir.push_str(&seq_type);
+        fdir.push_str(".fna.gz");
     }
 
     let mut rvec = String::new();
