@@ -275,7 +275,6 @@ fn minus_strand_invsersion(pat: String) -> String {
 fn search_seq(seq: String, window: Vec<i32>, pattern: String, strand: String) -> Vec<String> {
     let strand = strand.split("=").last().unwrap();
     let mut occurances: Vec<String> = Vec::new();
-    println!("seq {}, pattern {}", seq.len(), pattern.len());
     if seq.len() > pattern.len() {
         if strand == "-" {
             let seq = seq.to_lowercase();
