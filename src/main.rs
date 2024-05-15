@@ -18,18 +18,22 @@ fn main() {
         .nth(2)
         .expect("please enter the size for the search window (arg 2)");
     let size = size_string.trim().parse::<i32>().unwrap();
-    let pattern = env::args()
+    let raw_pattern = env::args()
         .nth(3)
         .expect("please enter the pattern to search for (arg 3)");
     let name = env::args()
         .nth(4)
-        .expect("please endter the name for the csv (arg 4)");
+        .expect("please enter the name for the csv (arg 4)");
     let seq_type = env::args()
         .nth(5)
-        .expect("please endter the type of sequence you are searching around (arg 5)");
+        .expect("please enter the type of sequence you are searching around (arg 5)");
     let species = env::args()
         .nth(6)
-        .expect("please endter the species tag (arg 6)");
+        .expect("please enter the species tag (arg 6)");
+    let option = env::args()
+        .nth(7)
+        .expect("please enter a option tag (arg 7)");
+
     let top_dir = env::current_dir().expect("bad top dir");
     let genomes = create_full_path(top_dir.clone(), String::from("genomes"));
     let annotation = create_full_path(top_dir.clone(), String::from("annotations"));
@@ -47,8 +51,29 @@ fn main() {
     );
     let full_geno = create_full_path(genomes.clone(), dir_geno.clone());
     let full_anno = create_full_path(annotation.clone(), dir_anno.clone());
-    println!("{:?}", full_geno);
-    println!("{:?}", full_anno);
+
+    let mut pattern = String::new();
+    let mut pat_identifier = String::new();
+    if option == "-csv" {
+        let search_path = create_full_path(top_dir.clone(), raw_pattern.clone());
+        assert!(Path::new(&search_path).exists());
+        let search_fasta = read_search_fasta_single(search_path);
+        let search_key = search_fasta.keys().next().unwrap();
+        let fasta_vals = search_fasta.get_key_value(search_key).unwrap().1;
+        pat_identifier.push_str(search_key);
+        pattern.push_str(fasta_vals);
+    }
+    if option == "-n" {
+        pattern.push_str(&raw_pattern);
+    }
+
+    let pattern_size = pattern.len();
+    let test_size = size as usize;
+    if test_size < pattern_size {
+        println!("Window Size (arg 2) must be larger than the length of the search pattern");
+        std::process::exit(3);
+    }
+
     assert!(Path::new(&full_anno).exists());
     assert!(Path::new(&full_geno).exists());
 
@@ -61,7 +86,7 @@ fn main() {
     // std::process::exit(1);
     let mut csv_name = name;
     csv_name.push_str("_");
-    csv_name.push_str(&pattern);
+    csv_name.push_str(&pat_identifier);
     csv_name.push_str("_");
     csv_name.push_str(&seq_type);
     csv_name.push_str("_");
@@ -87,6 +112,8 @@ fn main() {
         ])
         .expect("Did not write fist line");
 
+        println!("Now Searching for {}", &pattern);
+
         for gk in gkeys {
             let info_geno = get_info(parse_header(gk.to_string()));
             let acc = get_element(info_geno.clone(), String::from("acc"));
@@ -101,7 +128,6 @@ fn main() {
                 // makes sense
                 // !! I may have done this because it is taking the length from the actual sequence
                 // and comparing it to the length that we are getting from the header.
-                // I'm high right now so please come back and check this
                 let chrom_len = get_element(info_geno.clone(), String::from("len"));
                 let spchrom_len = chrom_len.split("=").last().unwrap();
                 let chrom_len_num = spchrom_len.to_string().parse::<i32>().unwrap();
@@ -138,6 +164,27 @@ fn main() {
         "Total time to completion: {:?}, minutes and {:?} seconds",
         duration_minutes, duration_remainder
     );
+}
+
+fn read_search_fasta_single<P>(filename: P) -> HashMap<String, String>
+where
+    P: AsRef<Path>,
+{
+    let file = File::open(filename).expect("Could not open file");
+    let buf = BufReader::new(file);
+    let mut fasta = HashMap::new();
+    let mut curid = String::new();
+    let mut curseq = String::new();
+    for line in buf.lines() {
+        let line = line.expect("Could not read line");
+        if line.starts_with('>') {
+            curid = line[..].trim().to_string();
+        } else {
+            curseq.push_str(line.trim());
+        }
+    }
+    fasta.insert(curid.clone(), curseq.clone());
+    fasta
 }
 
 fn get_begin_end(info: Vec<String>) -> Vec<i32> {
@@ -228,39 +275,45 @@ fn minus_strand_invsersion(pat: String) -> String {
 fn search_seq(seq: String, window: Vec<i32>, pattern: String, strand: String) -> Vec<String> {
     let strand = strand.split("=").last().unwrap();
     let mut occurances: Vec<String> = Vec::new();
-    if strand == "-" {
-        let seq = seq.to_lowercase();
-        let pattern = pattern.to_lowercase();
-        let inversion = minus_strand_invsersion(pattern);
-        let pattern = inversion;
-        let bseq = seq.as_bytes();
-        let bpat = pattern.as_bytes();
-        let left_bound = window[0] as usize;
-        let right_bound = window[1] as usize;
-        let search_area = &bseq[left_bound..right_bound];
+    println!("seq {}, pattern {}", seq.len(), pattern.len());
+    if seq.len() > pattern.len() {
+        if strand == "-" {
+            let seq = seq.to_lowercase();
+            let pattern = pattern.to_lowercase();
+            let inversion = minus_strand_invsersion(pattern);
+            let pattern = inversion;
+            let bseq = seq.as_bytes();
+            let bpat = pattern.as_bytes();
+            let left_bound = window[0] as usize;
+            let right_bound = window[1] as usize;
+            let search_area = &bseq[left_bound..right_bound];
 
-        for i in 0..search_area.len() - bpat.len() {
-            if bpat == &search_area[i..i + bpat.len()] {
-                let location = left_bound + i;
-                occurances.push(location.to_string());
+            for i in 0..search_area.len() - bpat.len() {
+                if bpat == &search_area[i..i + bpat.len()] {
+                    let location = left_bound + i;
+                    occurances.push(location.to_string());
+                }
+            }
+        } else {
+            let seq = seq.to_lowercase();
+            let pattern = pattern.to_lowercase();
+            let bseq = seq.as_bytes();
+            let bpat = pattern.as_bytes();
+            let left_bound = window[0] as usize;
+            let right_bound = window[1] as usize;
+            let search_area = &bseq[left_bound..right_bound];
+
+            for i in 0..search_area.len() - bpat.len() {
+                if bpat == &search_area[i..i + bpat.len()] {
+                    let location = left_bound + i;
+                    occurances.push(location.to_string());
+                }
             }
         }
     } else {
-        let seq = seq.to_lowercase();
-        let pattern = pattern.to_lowercase();
-        let bseq = seq.as_bytes();
-        let bpat = pattern.as_bytes();
-        let left_bound = window[0] as usize;
-        let right_bound = window[1] as usize;
-        let search_area = &bseq[left_bound..right_bound];
-
-        for i in 0..search_area.len() - bpat.len() {
-            if bpat == &search_area[i..i + bpat.len()] {
-                let location = left_bound + i;
-                occurances.push(location.to_string());
-            }
-        }
+        occurances.push(String::from("pattern larger than sequence"));
     }
+
     occurances
 }
 
