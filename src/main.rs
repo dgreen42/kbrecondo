@@ -1,8 +1,8 @@
-use csv::Writer;
+use csv::{Reader, Writer};
 use flate2::read::MultiGzDecoder;
-use std::collections::HashMap;
+use std::collections::{btree_map::Keys, HashMap};
 use std::fs::{read_dir, File};
-use std::io::{BufRead, BufReader};
+use std::io::{stdin, BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use std::{env, usize};
@@ -10,7 +10,6 @@ use std::{env, usize};
 fn main() {
     env::set_var("RUST_BACKTRACE", "0");
 
-    let start = Instant::now();
     let genotype = env::args()
         .nth(1)
         .expect("please enter a valid genome name (arg 1)");
@@ -54,7 +53,17 @@ fn main() {
 
     let mut pattern = String::new();
     let mut pat_identifier = String::new();
-    if option == "-csv" {
+    if option == "-m" {
+        let mut csv_path = String::new();
+        println!("\nPlease enter path to csv");
+        stdin()
+            .read_line(&mut csv_path)
+            .expect("Did not enter a path to csv");
+        let csv_path = csv_path.trim();
+        let search_map = read_csv_first_col(csv_path);
+    }
+
+    if option == "-f" {
         let search_path = create_full_path(top_dir.clone(), raw_pattern.clone());
         assert!(Path::new(&search_path).exists());
         let search_fasta = read_search_fasta_single(search_path);
@@ -63,6 +72,7 @@ fn main() {
         pat_identifier.push_str(search_key);
         pattern.push_str(fasta_vals);
     }
+
     if option == "-n" {
         pattern.push_str(&raw_pattern);
     }
@@ -113,57 +123,58 @@ fn main() {
         .expect("Did not write fist line");
 
         println!("Now Searching for {}", &pattern);
+    }
+}
 
-        for gk in gkeys {
-            let info_geno = get_info(parse_header(gk.to_string()));
-            let acc = get_element(info_geno.clone(), String::from("acc"));
-            let chromosome = acc.split("=").last().unwrap();
+fn search(decogeno: akeys: Keys<'_, String, String>, gkeys: Keys<'_, String, String>) {
 
-            for ak in akeys.clone() {
-                let info_anno = get_info(parse_header(ak.to_string()));
-                let chrom = get_element(info_anno.clone(), String::from("chr"));
-                let spchrom = chrom.split("=").last().unwrap();
-                // come back to this and see if it makes sense. Not sure that the chromosomes that
-                // are used in the ladder assert! are differnet, try to reason about why this test
-                // makes sense
-                // !! I may have done this because it is taking the length from the actual sequence
-                // and comparing it to the length that we are getting from the header.
-                let chrom_len = get_element(info_geno.clone(), String::from("len"));
-                let spchrom_len = chrom_len.split("=").last().unwrap();
-                let chrom_len_num = spchrom_len.to_string().parse::<i32>().unwrap();
+    for gk in gkeys {
+        let info_geno = get_info(parse_header(gk.to_string()));
+        let acc = get_element(info_geno.clone(), String::from("acc"));
+        let chromosome = acc.split("=").last().unwrap();
 
-                if chromosome == spchrom {
-                    let chrom_seq = decogeno.get_key_value(gk).unwrap().1;
-                    let chrom_seq_len = chrom_seq.len() as i32;
-                    assert!(chrom_seq_len == chrom_len_num);
-                    let header = &info_anno[0];
-                    let strand = get_element(info_anno.clone(), String::from("strand"));
-                    let begend = get_begin_end(info_anno.clone());
-                    let window = build_window(begend[0], begend[1], size, chrom_seq_len);
-                    let occrances =
-                        search_seq(chrom_seq.to_string(), window, pattern.clone(), strand);
-                    write_csv(&mut wrt, info_anno.clone(), occrances);
-                }
+        for ak in akeys.clone() {
+            let info_anno = get_info(parse_header(ak.to_string()));
+            let chrom = get_element(info_anno.clone(), String::from("chr"));
+            let spchrom = chrom.split("=").last().unwrap();
+            // come back to this and see if it makes sense. Not sure that the chromosomes that
+            // are used in the ladder assert! are differnet, try to reason about why this test
+            // makes sense
+            // !! I may have done this because it is taking the length from the actual sequence
+            // and comparing it to the length that we are getting from the header.
+            let chrom_len = get_element(info_geno.clone(), String::from("len"));
+            let spchrom_len = chrom_len.split("=").last().unwrap();
+            let chrom_len_num = spchrom_len.to_string().parse::<i32>().unwrap();
+
+            if chromosome == spchrom {
+                let chrom_seq = decogeno.get_key_value(gk).unwrap().1;
+                let chrom_seq_len = chrom_seq.len() as i32;
+                assert!(chrom_seq_len == chrom_len_num);
+                let header = &info_anno[0];
+                let strand = get_element(info_anno.clone(), String::from("strand"));
+                let begend = get_begin_end(info_anno.clone());
+                let window = build_window(begend[0], begend[1], size, chrom_seq_len);
+                let occrances = search_seq(chrom_seq.to_string(), window, pattern.clone(), strand);
+                write_csv(&mut wrt, info_anno.clone(), occrances);
             }
-            let dur = start.elapsed();
-            let dur_minutes = dur.as_secs() / 60;
-            let dur_remainder = dur.as_secs() % 60;
-            println!(
-                "Time to complete {} search: {:?}, minutes and {:?} seconds",
-                gk.to_string(),
-                dur_minutes,
-                dur_remainder
-            );
         }
     }
+}
 
-    let duration = start.elapsed();
-    let duration_minutes = duration.as_secs() / 60;
-    let duration_remainder = duration.as_secs() % 60;
-    println!(
-        "Total time to completion: {:?}, minutes and {:?} seconds",
-        duration_minutes, duration_remainder
-    );
+fn read_csv_first_col<P>(filename: P) -> HashMap<String, String>
+where
+    P: AsRef<Path>,
+{
+    let mut id_map: HashMap<String, String> = HashMap::new();
+    let mut rdr = Reader::from_path(filename).expect("Csv does not exist");
+    for record in rdr.records() {
+        let rec = record.unwrap();
+        let id = &rec[0];
+        let sudoname = &rec[1];
+        id_map.insert(id.to_string(), sudoname.to_string());
+    }
+
+    id_map
 }
 
 fn read_search_fasta_single<P>(filename: P) -> HashMap<String, String>
