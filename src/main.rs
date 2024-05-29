@@ -53,15 +53,6 @@ fn main() {
 
     let mut pattern = String::new();
     let mut pat_identifier = String::new();
-    if option == "-m" {
-        let mut csv_path = String::new();
-        println!("\nPlease enter path to csv");
-        stdin()
-            .read_line(&mut csv_path)
-            .expect("Did not enter a path to csv");
-        let csv_path = csv_path.trim();
-        let search_map = read_csv_first_col(csv_path);
-    }
 
     if option == "-f" {
         let search_path = create_full_path(top_dir.clone(), raw_pattern.clone());
@@ -73,8 +64,14 @@ fn main() {
         pattern.push_str(fasta_vals);
     }
 
+    if option == "-m" {
+        pattern.push_str(&raw_pattern);
+        pat_identifier.push_str(&raw_pattern);
+    }
+
     if option == "-n" {
         pattern.push_str(&raw_pattern);
+        pat_identifier.push_str(&raw_pattern);
     }
 
     let pattern_size = pattern.len();
@@ -123,7 +120,38 @@ fn main() {
         .expect("Did not write fist line");
 
         println!("Now Searching for {}", &pattern);
-        search(decogeno.clone(), akeys, gkeys.clone(), size, pattern, wrt);
+
+        if option == "-m" {
+            let mut csv_path = String::new();
+            println!("\nPlease enter path to csv");
+            stdin()
+                .read_line(&mut csv_path)
+                .expect("Did not enter a path to csv");
+            let csv_path = csv_path.trim();
+            let search_map = read_csv_first_col(csv_path);
+            search(
+                decogeno.clone(),
+                akeys,
+                gkeys,
+                search_map.keys(),
+                size,
+                pattern,
+                wrt,
+                option,
+            );
+        } else {
+            let search_map: HashMap<String, String> = HashMap::new();
+            search(
+                decogeno.clone(),
+                akeys,
+                gkeys,
+                search_map.keys(),
+                size,
+                pattern,
+                wrt,
+                option,
+            );
+        }
     }
 }
 
@@ -131,40 +159,72 @@ fn search(
     decogeno: HashMap<String, String>,
     akeys: Keys<'_, String, String>,
     gkeys: Keys<'_, String, String>,
+    search_map: Keys<'_, String, String>,
+
     size: i32,
     pattern: String,
     mut wrt: Writer<File>,
+    option: String,
 ) {
+    let start = Instant::now();
     for gk in gkeys {
+        println!("\nSearching: {:?}", gk.to_string());
         let info_geno = get_info(parse_header(gk.to_string()));
         let acc = get_element(info_geno.clone(), String::from("acc"));
         let chromosome = acc.split("=").last().unwrap();
 
         for ak in akeys.clone() {
             let info_anno = get_info(parse_header(ak.to_string()));
+
             let chrom = get_element(info_anno.clone(), String::from("chr"));
             let spchrom = chrom.split("=").last().unwrap();
-            // come back to this and see if it makes sense. Not sure that the chromosomes that
-            // are used in the ladder assert! are differnet, try to reason about why this test
-            // makes sense
-            // !! I may have done this because it is taking the length from the actual sequence
-            // and comparing it to the length that we are getting from the header.
             let chrom_len = get_element(info_geno.clone(), String::from("len"));
             let spchrom_len = chrom_len.split("=").last().unwrap();
             let chrom_len_num = spchrom_len.to_string().parse::<i32>().unwrap();
 
-            if chromosome == spchrom {
-                let chrom_seq = decogeno.get_key_value(gk).unwrap().1;
-                let chrom_seq_len = chrom_seq.len() as i32;
-                assert!(chrom_seq_len == chrom_len_num);
-                let header = &info_anno[0];
-                let strand = get_element(info_anno.clone(), String::from("strand"));
-                let begend = get_begin_end(info_anno.clone());
-                let window = build_window(begend[0], begend[1], size, chrom_seq_len);
-                let occrances = search_seq(chrom_seq.to_string(), window, pattern.clone(), strand);
-                write_csv(&mut wrt, info_anno.clone(), occrances);
+            if option == "-m" {
+                let gn = get_element(info_anno.clone(), String::from("gn"));
+                for search in search_map.clone() {
+                    let search_test = search.split("_").last().unwrap();
+                    if gn.trim().contains(search_test) && !search_test.is_empty() {
+                        if chromosome == spchrom {
+                            let chrom_seq = decogeno.get_key_value(gk).unwrap().1;
+                            let chrom_seq_len = chrom_seq.len() as i32;
+                            assert!(chrom_seq_len == chrom_len_num);
+                            let header = &info_anno[0];
+                            let strand = get_element(info_anno.clone(), String::from("strand"));
+                            let begend = get_begin_end(info_anno.clone());
+                            let window = build_window(begend[0], begend[1], size, chrom_seq_len);
+                            let occrances =
+                                search_seq(chrom_seq.to_string(), window, pattern.clone(), strand);
+                            write_csv(&mut wrt, info_anno.clone(), occrances);
+                        }
+                    } else {
+                        continue;
+                    }
+                }
+            } else {
+                if chromosome == spchrom {
+                    let chrom_seq = decogeno.get_key_value(gk).unwrap().1;
+                    let chrom_seq_len = chrom_seq.len() as i32;
+                    assert!(chrom_seq_len == chrom_len_num);
+                    let header = &info_anno[0];
+                    let strand = get_element(info_anno.clone(), String::from("strand"));
+                    let begend = get_begin_end(info_anno.clone());
+                    let window = build_window(begend[0], begend[1], size, chrom_seq_len);
+                    let occrances =
+                        search_seq(chrom_seq.to_string(), window, pattern.clone(), strand);
+                    write_csv(&mut wrt, info_anno.clone(), occrances);
+                }
             }
         }
+        let dur = start.elapsed();
+        let dur_min = dur.as_secs() / 60;
+        let dur_rem = dur.as_secs() % 60;
+        println!(
+            "Completed in {:?} minutes and {:?} seconds",
+            dur_min, dur_rem
+        )
     }
 }
 
@@ -293,7 +353,6 @@ fn minus_strand_invsersion(pat: String) -> String {
 fn search_seq(seq: String, window: Vec<i32>, pattern: String, strand: String) -> Vec<String> {
     let strand = strand.split("=").last().unwrap();
     let mut occurances: Vec<String> = Vec::new();
-    println!("seq {}, pattern {}", seq.len(), pattern.len());
     if seq.len() > pattern.len() {
         if strand == "-" {
             let seq = seq.to_lowercase();
