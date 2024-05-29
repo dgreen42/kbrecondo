@@ -1,6 +1,6 @@
 use csv::{Reader, Writer};
 use flate2::read::MultiGzDecoder;
-use std::collections::{btree_map::Keys, HashMap};
+use std::collections::{hash_map::Keys, HashMap};
 use std::fs::{read_dir, File};
 use std::io::{stdin, BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -123,11 +123,18 @@ fn main() {
         .expect("Did not write fist line");
 
         println!("Now Searching for {}", &pattern);
+        search(decogeno.clone(), akeys, gkeys.clone(), size, pattern, wrt);
     }
 }
 
-fn search(decogeno: akeys: Keys<'_, String, String>, gkeys: Keys<'_, String, String>) {
-
+fn search(
+    decogeno: HashMap<String, String>,
+    akeys: Keys<'_, String, String>,
+    gkeys: Keys<'_, String, String>,
+    size: i32,
+    pattern: String,
+    mut wrt: Writer<File>,
+) {
     for gk in gkeys {
         let info_geno = get_info(parse_header(gk.to_string()));
         let acc = get_element(info_geno.clone(), String::from("acc"));
