@@ -12,7 +12,34 @@ fn main() {
 
     let genotype = env::args()
         .nth(1)
-        .expect("please enter a valid genome name (arg 1)");
+        .expect("please enter a valid genome name (arg 1) or type -help");
+    if genotype == "-help" {
+        println!("
+Kbrecondo version v1.0.0
+
+Description: searches fastas for sequences in a window with several search parameters. Hard coded for the Medicago truncatula 
+             genome and annotations as formatted in:
+             https://data.legumeinfo.org/Medicago/truncatula/
+
+Format: kbrecondo [genotype] [window] [search] [output] [sequence] [species] [option]
+
+Example: 
+
+Manually input search:
+    kbrecondo A17 1000 ACTAC test.csv cds medtr -n
+
+Fasta input search:
+    kbrecondo A17 1000 search.fasta test.csv cds medtr -f
+
+Flags:
+    -n: normal search, runs a search in the format of the manually input search
+    -f: use a fasta as the sequence input (currently only takes one sequence but in the future will take mutliple for bulk search)
+    -m: asks for a csv containing gene ids to use to guide searching. The first column of the csv must have the gene ids. the ids
+        will be matched based on what is found in the headers of the fasta
+
+");
+        std::process::exit(3);
+    }
     let size_string = env::args()
         .nth(2)
         .expect("please enter the size for the search window (arg 2)");
