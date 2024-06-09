@@ -26,10 +26,10 @@ Format: kbrecondo [genotype] [window] [search] [output] [sequence] [species] [op
 Example: 
 
 Manually input search:
-    kbrecondo A17 1000 ACTAC test.csv cds medtr -n
+    kbrecondo A17 1000 ACTAC test cds medtr -n
 
 Fasta input search:
-    kbrecondo A17 1000 search.fasta test.csv cds medtr -f
+    kbrecondo A17 1000 search.fasta test cds medtr -f
 
 Flags:
     -n: normal search, runs a search in the format of the manually input search
