@@ -75,6 +75,7 @@ Flags:
         seq_type.clone(),
         species.clone(),
     );
+
     let full_geno = create_full_path(genomes.clone(), dir_geno.clone());
     let full_anno = create_full_path(annotation.clone(), dir_anno.clone());
 
@@ -155,6 +156,8 @@ Flags:
                 .read_line(&mut csv_path)
                 .expect("Did not enter a path to csv");
             let csv_path = csv_path.trim();
+            let csv_path = create_full_path(top_dir.clone(), csv_path.to_string());
+            println!("{:?}", csv_path);
             let search_map = read_csv_first_col(csv_path);
             search(
                 decogeno.clone(),
@@ -262,7 +265,7 @@ where
     let mut id_map: HashMap<String, String> = HashMap::new();
     let mut rdr = Reader::from_path(filename).expect("Csv does not exist");
     for record in rdr.records() {
-        let rec = record.unwrap();
+        let rec = record.expect("268, could not read record");
         let id = &rec[0];
         let sudoname = &rec[1];
         id_map.insert(id.to_string(), sudoname.to_string());
