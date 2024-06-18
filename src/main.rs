@@ -202,7 +202,6 @@ fn search(
 
         for ak in akeys.clone() {
             let info_anno = get_info(parse_header(ak.to_string()));
-
             let chrom = get_element(info_anno.clone(), String::from("chr"));
             let spchrom = chrom.split("=").last().unwrap();
             let chrom_len = get_element(info_geno.clone(), String::from("len"));
@@ -509,15 +508,25 @@ fn get_name(pat: String, search_dir: PathBuf, seq_type: String, species: String)
         .unwrap()
         == String::from("annotations")
     {
-        fdir.push_str(&mdir);
-        fdir.push_str(".");
-        fdir.push_str(&seq_type);
-        fdir.push_str(".fna.gz");
+        let seq_sp: Vec<_> = seq_type.split(" ").collect();
+        if seq_sp[1] == "-f" {
+            fdir.push_str(&mdir);
+            fdir.push_str(".");
+            fdir.push_str(&seq_type);
+            fdir.push_str(".fna.gz");
+        }
+        if seq_sp[1] == "-b" {
+            fdir.push_str(&mdir);
+            fdir.push_str(".");
+            fdir.push_str(&seq_type);
+            fdir.push_str(".bed.gz");
+        }
     }
 
     let mut rvec = String::new();
     rvec.push_str(&mdir);
     rvec.push_str(&fdir);
+    println!("{:?}", rvec);
     rvec
 }
 
@@ -550,30 +559,34 @@ where
     fasta
 }
 
-fn parse_header(header: String) -> Vec<String> {
-    let sp = header.split(' ');
-    let mut definition_body: String = String::new();
+fn parse_header(header: String, file_type: String) -> Vec<String> {
     let mut svec: Vec<String> = Vec::new();
+    if file_type == "-f" {
+        let sp = header.split(' ');
+        let mut definition_body: String = String::new();
 
-    for i in sp {
-        /* finish getting the definition into one element */
-        if !i.contains("=") && !i.contains(">") {
-            definition_body.push_str(i);
-        } else {
-            svec.push(i.to_string());
+        for i in sp {
+            /* finish getting the definition into one element */
+            if !i.contains("=") && !i.contains(">") {
+                definition_body.push_str(i);
+            } else {
+                svec.push(i.to_string());
+            }
         }
-    }
-    let mut definition: String = String::new();
-    for i in &svec {
-        if i.contains("def=") {
-            definition.push_str(&i);
+        let mut definition: String = String::new();
+        for i in &svec {
+            if i.contains("def=") {
+                definition.push_str(&i);
+            }
         }
+        definition.push_str(&definition_body);
+        if let Some(ind) = svec.iter().position(|val| val.contains("def=")) {
+            svec.swap_remove(ind);
+        }
+        svec.push(definition);
     }
-    definition.push_str(&definition_body);
-    if let Some(ind) = svec.iter().position(|val| val.contains("def=")) {
-        svec.swap_remove(ind);
-    }
-    svec.push(definition);
+    if file_type == "-b" {}
+
     svec
 }
 
