@@ -1,14 +1,9 @@
 use crate::{pathing::*, read_write::*, search::*};
 use csv::Writer;
-use std::collections::{hash_map::Keys, HashMap};
+use std::collections::HashMap;
 use std::io::stdin;
 use std::path::Path;
 use std::{env, usize};
-
-struct Dirs {
-    genome: String,
-    annotation: String,
-}
 
 fn main() {
     env::set_var("RUST_BACKTRACE", "0");
@@ -65,8 +60,8 @@ Flags:
 
     let top_dir = env::current_dir().expect("bad top dir");
 
-    let genomes = create_full_path(top_dir.clone(), "genomes");
-    let annotation = create_full_path(top_dir.clone(), "annotations");
+    let genomes = create_full_path(&top_dir, "genomes");
+    let annotation = create_full_path(&top_dir, "annotations");
 
     let dir_geno = get_name(
         genotype.clone(),
@@ -81,14 +76,14 @@ Flags:
         species.clone(),
     );
 
-    let full_geno = create_full_path(genomes.clone(), dir_geno.clone());
-    let full_anno = create_full_path(annotation.clone(), dir_anno.clone());
+    let full_geno = create_full_path(&genomes, &dir_geno);
+    let full_anno = create_full_path(&annotation, &dir_anno);
 
     let mut pattern = String::new();
     let mut pat_identifier = String::new();
 
     if option == "-f" {
-        let search_path = create_full_path(top_dir.clone(), raw_pattern.clone());
+        let search_path = create_full_path(&top_dir, &raw_pattern);
         assert!(Path::new(&search_path).exists());
         let search_fasta = read_search_fasta_single(search_path);
         let search_key = search_fasta.keys().next().unwrap();
@@ -117,8 +112,8 @@ Flags:
     assert!(Path::new(&full_anno).exists());
     assert!(Path::new(&full_geno).exists());
 
-    let decogeno = read_fasta(full_geno);
-    let decoanno = read_fasta(full_anno);
+    let decogeno = read_fasta(&full_geno);
+    let decoanno = read_fasta(&full_anno);
 
     let akeys = decoanno.keys();
     let gkeys = decogeno.keys();
@@ -132,7 +127,7 @@ Flags:
     csv_name.push_str("_");
     csv_name.push_str(&species);
     csv_name.push_str(".csv");
-    let csv_path = create_full_path(top_dir.clone(), csv_name.clone());
+    let csv_path = create_full_path(&top_dir, &csv_name);
 
     if Path::new(&csv_path).exists() {
         println!(
@@ -161,10 +156,10 @@ Flags:
                 .read_line(&mut csv_path)
                 .expect("Did not enter a path to csv");
             let csv_path = csv_path.trim();
-            let csv_path = create_full_path(top_dir.clone(), csv_path.to_string());
+            let csv_path = create_full_path(&top_dir, &csv_path);
             println!("{:?}", csv_path);
-            let search_map = read_csv_first_col(csv_path);
-            search(
+            let search_map = read_csv_first_col(&csv_path);
+            search2(
                 decogeno.clone(),
                 akeys,
                 gkeys,
@@ -176,7 +171,7 @@ Flags:
             );
         } else {
             let search_map: HashMap<String, String> = HashMap::new();
-            search(
+            search2(
                 decogeno.clone(),
                 akeys,
                 gkeys,
@@ -194,7 +189,7 @@ mod pathing {
 
     use ::std::{fs::read_dir, path::PathBuf};
 
-    pub fn create_full_path(top_dir: PathBuf, dir: &str) -> PathBuf {
+    pub fn create_full_path(top_dir: &PathBuf, dir: &str) -> PathBuf {
         let mut s_dir = top_dir
             .clone()
             .into_os_string()
@@ -250,6 +245,7 @@ mod pathing {
             == String::from("annotations")
         {
             let seq_sp: Vec<_> = seq_type.split(" ").collect();
+            println!("{:?}", seq_sp);
             if seq_sp[1] == "-f" {
                 fdir.push_str(&mdir);
                 fdir.push_str(".");
@@ -280,37 +276,32 @@ mod read_write {
         collections::HashMap,
         fs::File,
         io::{BufRead, BufReader},
-        path::{Path, PathBuf},
+        path::Path,
         time::Instant,
     };
 
-    struct Reads {
-        filename: PathBuf,
-    }
-
-    impl Reads {
-        pub fn read_csv_first_col<P>(&self) -> HashMap<String, String>
-        where
-            P: AsRef<Path>,
-        {
-            let mut id_map: HashMap<String, String> = HashMap::new();
-            let mut rdr = Reader::from_path(&self.filename).expect("Csv does not exist");
-            for record in rdr.records() {
-                let rec = record.expect("268, could not read record");
-                let id = &rec[0];
-                let sudoname = &rec[1];
-                id_map.insert(id.to_string(), sudoname.to_string());
-            }
-
-            id_map
+    pub fn read_csv_first_col<P>(file: P) -> HashMap<String, String>
+    where
+        P: AsRef<Path>,
+    {
+        let mut id_map: HashMap<String, String> = HashMap::new();
+        let mut rdr = Reader::from_path(file).expect("Csv does not exist");
+        for record in rdr.records() {
+            let rec = record.expect("268, could not read record");
+            let id = &rec[0];
+            let sudoname = &rec[1];
+            id_map.insert(id.to_string(), sudoname.to_string());
         }
+
+        id_map
     }
-    pub fn read_fasta<P>(&self) -> HashMap<String, String>
+
+    pub fn read_fasta<P>(file: P) -> HashMap<String, String>
     where
         P: AsRef<Path>,
     {
         let start = Instant::now();
-        let file = File::open(&self.filename).expect("Could not open file");
+        let file = File::open(file).expect("Could not open file");
         let gz = MultiGzDecoder::new(file);
         let buf = BufReader::new(gz);
         let mut fasta = HashMap::new();
@@ -587,14 +578,12 @@ mod search {
 
 mod info {
 
-    use std::{fs::read_dir, path::PathBuf};
-
     pub struct Key {
         pub key: String,
         pub file_type: String,
     }
 
-    struct Info {
+    pub struct Info {
         pub info: Vec<String>,
     }
 
